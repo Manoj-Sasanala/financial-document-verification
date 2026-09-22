@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:financial-document-verification:synthetic-customer:1.0.0",
+  "title": "Synthetic Customer Reference Record",
+  "description": "Frozen synthetic customer reference schema for the proof-of-address verification MVP. Reference truth contains only customer fields required for deterministic comparison.",
+  "$comment": "DATA-01 v1.0.0. Synthetic/fake data only. Document fields, verification findings, risk indicators, ML outputs, policy evidence, and human decisions are intentionally excluded.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "customer_id",
+    "customer_name",
+    "address",
+    "postal_code"
+  ],
+  "properties": {
+    "customer_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "Stable synthetic identifier used to select the reference customer."
+    },
+    "customer_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "Synthetic customer name used as reference truth."
+    },
+    "address": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "description": "Synthetic customer address used as reference truth."
+    },
+    "postal_code": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 20,
+      "description": "Synthetic postal code stored as text so formatting and leading zeroes are preserved."
+    }
+  }
+}
