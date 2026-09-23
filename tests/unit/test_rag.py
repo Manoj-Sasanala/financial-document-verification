@@ -486,3 +486,79 @@ def test_empty_query_text_is_explicit() -> None:
     with pytest.raises(_RetrievalError) as exc_info:
         _retrieve(_RQ(query_text="   ", indicator_codes=[], mismatch_fields=[]))
     assert exc_info.value.code == "EMPTY_QUERY"
+
+
+# ---------------------------------------------------------------------------
+# RAG-07: Read-only boundary (DoD: boundary test passes; replacing retrieved
+# evidence leaves VER-05 results unchanged)
+# ---------------------------------------------------------------------------
+
+
+def _ver05_outcome(kind: str = "name"):
+    from app.document.field_parser import parse_fields as _parse
+    from app.verification.compare import compare_fields as _cmp
+    from app.verification.normalize import normalize_fields as _nf
+    from app.verification.risk_rules import assess_risk as _risk
+    from app.verification.validate import validate_fields as _val
+
+    texts = {
+        "name": "Customer Name\nAarav Sharma\nAddress\n42 Example Avenue, Vijayawada\nPostal Code\n520001",
+    }
+    normalized = _nf(_parse(texts[kind]).fields)
+    findings = _val(normalized)
+    comparisons = _cmp(normalized, _REF01)
+    indicators = _risk(findings, comparisons)
+    return findings, comparisons, indicators
+
+
+def test_replacing_evidence_leaves_ver05_results_unchanged() -> None:
+    from app.rag.query_builder import RetrievalQuery as _RQ
+    from app.rag.retriever import retrieve_with_boundary as _bounded
+    from app.verification.boundary import assert_unchanged as _same
+
+    findings, comparisons, indicators = _ver05_outcome()
+    _, query_comparisons, query_indicators = _ver05_outcome()
+    from app.rag.query_builder import build_query as _bq
+
+    real_query = _bq(query_indicators, query_comparisons)
+    swapped_query = _RQ(
+        query_text="zxqwqx jjjjj vvvv qqqq zzzz",
+        indicator_codes=[],
+        mismatch_fields=[],
+    )
+
+    sealed, first = _bounded(real_query, findings, indicators)
+    _, second = _bounded(swapped_query, findings, indicators)
+
+    _same(sealed, findings, indicators)
+    assert [i.indicator_code for i in indicators] == ["name_mismatch"]
+    assert first.status == "evidence_found"
+    assert second.status == "no_evidence"
+
+
+def test_boundary_is_documented() -> None:
+    doc = (PROJECT_ROOT / "docs" / "architecture.md").read_text(encoding="utf-8")
+
+    assert "read-only" in doc
+    assert "retrieve_with_boundary" in doc
+    assert "never" in doc and "override" in doc
+
+
+def test_retriever_exposes_no_write_path() -> None:
+    import app.rag.retriever as _mod
+
+    callables = {
+        name
+        for name in dir(_mod)
+        if not name.startswith("_") and callable(getattr(_mod, name))
+    }
+    write_like = {
+        name
+        for name in callables
+        if any(
+            verb in name.lower()
+            for verb in ("save", "write", "update", "delete", "store", "persist", "mutate")
+        )
+    }
+
+    assert write_like == set()

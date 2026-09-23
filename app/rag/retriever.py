@@ -144,11 +144,35 @@ def retrieve(
     return RetrievalResult(status="evidence_found", evidence=evidence)
 
 
+def retrieve_with_boundary(
+    query: RetrievalQuery,
+    findings: list,
+    indicators: list,
+    *,
+    top_k: int = DEFAULT_TOP_K,
+    min_score: float = MIN_SCORE,
+    context: dict[str, Any] | None = None,
+):
+    """Retrieve evidence with the VER-06 read-only boundary enforced.
+
+    Seals the deterministic VER-05 outputs before retrieval and proves them
+    unchanged afterwards: replacing or altering retrieved evidence cannot
+    change findings or indicators. Returns ``(sealed, result)``.
+    """
+    from app.verification.boundary import assert_unchanged, seal_verification
+
+    sealed = seal_verification(findings, indicators)
+    result = retrieve(query, top_k=top_k, min_score=min_score, context=context)
+    assert_unchanged(sealed, findings, indicators)
+    return sealed, result
+
+
 __all__ = [
     "RetrievalError",
     "embed_query_text",
     "load_retrieval_context",
     "retrieve",
+    "retrieve_with_boundary",
     "CHUNKS_PATH",
     "DEFAULT_TOP_K",
     "INDEX_PATH",
