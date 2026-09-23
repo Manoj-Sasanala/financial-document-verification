@@ -36,6 +36,18 @@ Upload a synthetic proof-of-address PDF to `/api/v1/cases` with a
 | `LLM_MODEL` | `demo-explainer-1.0` | Model label recorded in results |
 | `LLM_TIMEOUT_S` | `30` | LLM HTTP timeout in seconds |
 
+## Persistence (DEP-02)
+
+`CASE_DB_PATH` selects the SQLite file. In compose, the `kyc-data` named
+volume persists `/data/db.sqlite3` across container restarts and rebuilds:
+
+```sh
+docker compose up --build -d
+```
+
+Without Docker, point `CASE_DB_PATH` at any durable filesystem path; the
+QA-06 restart suite proves file-backed cases survive process restarts.
+
 ## Notes
 
 - Model artifacts under `artifacts/` are baked into the image; the
