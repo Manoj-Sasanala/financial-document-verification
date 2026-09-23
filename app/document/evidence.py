@@ -126,11 +126,123 @@ def assert_no_silent_fill(bundle: EvidenceBundle, parsed: ParsedDocument) -> Non
             )
 
 
+# ---------------------------------------------------------------------------
+# DOC-06: extraction result object — raw text/value evidence plus page/source
+# references survive end to end for reviewer UI and SQLite provenance.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ExtractionResult:
+    """Complete traceable extraction for one document input."""
+
+    method: str
+    text: str
+    page_count: int
+    doc_sha256: str
+    parsed: ParsedDocument
+    bundle: EvidenceBundle
+    provenance: dict[str, str | int | list[str] | None] = field(default_factory=dict)
+
+
+def _provenance_refs(bundle: EvidenceBundle, page_count: int) -> list[str]:
+    refs: list[str] = []
+    for record in bundle.fields:
+        if record.source_reference:
+            refs.append(record.source_reference)
+    for page in range(1, page_count + 1):
+        ref = f"pdf#page={page}"
+        if ref not in refs:
+            refs.append(ref)
+    return refs
+
+
+def from_pdf_bytes(pdf_bytes: bytes, *, filename: str | None = None) -> ExtractionResult:
+    """Extract natively (DOC-02), parse (DOC-04) and evidence (DOC-05)."""
+    from app.document.pdf_extract import PdfExtractionError, extract_pdf_text
+
+    try:
+        native = extract_pdf_text(pdf_bytes, filename=filename)
+    except Exception as exc:
+        code = getattr(exc, "code", "EXTRACTION_FAILED")
+        raise EvidenceError(code, f"Native extraction failed: {exc}") from exc
+
+    from app.document.field_parser import parse_fields
+
+    parsed = parse_fields(native.text)
+    bundle = build_evidence(
+        parsed, doc_sha256=native.sha256, extraction_method=native.extraction_method
+    )
+    refs = _provenance_refs(bundle, native.page_count)
+    for ref in native.provenance.get("extraction_source_refs", []):
+        if ref not in refs:
+            refs.append(ref)
+    provenance: dict[str, str | int | list[str] | None] = {
+        **native.provenance,
+        "task_id": "DOC-06",
+        "method": "native_text",
+        "doc_sha256": native.sha256,
+        "page_count": native.page_count,
+        "extraction_source_refs": refs,
+    }
+    return ExtractionResult(
+        method="native_text",
+        text=native.text,
+        page_count=native.page_count,
+        doc_sha256=native.sha256,
+        parsed=parsed,
+        bundle=bundle,
+        provenance=provenance,
+    )
+
+
+def from_text(
+    text: str,
+    *,
+    method: str = "ocr",
+    source_name: str = "page-1",
+    doc_sha256: str | None = None,
+) -> ExtractionResult:
+    """Parse + evidence path for OCR (DOC-03) or pre-extracted text."""
+    from app.document.field_parser import parse_fields
+
+    parsed = parse_fields(text, source_name=source_name)
+    bundle = build_evidence(parsed, doc_sha256=doc_sha256, extraction_method=method)
+    provenance: dict[str, str | int | list[str] | None] = {
+        "task_id": "DOC-06",
+        "method": method,
+        "page_count": 1,
+        "extraction_source_refs": _provenance_refs(bundle, 1),
+        **parsed.provenance,
+    }
+    if doc_sha256:
+        provenance["doc_sha256"] = doc_sha256
+    return ExtractionResult(
+        method=method,
+        text=text.strip(),
+        page_count=1,
+        doc_sha256=doc_sha256 or "",
+        parsed=parsed,
+        bundle=bundle,
+        provenance=provenance,
+    )
+
+
+def extraction_source_refs(result: ExtractionResult) -> list[str]:
+    """Refs for the frozen ``Provenance.extraction_source_refs`` contract."""
+    refs = result.provenance.get("extraction_source_refs")
+    return list(refs) if isinstance(refs, list) else []
+
+
 __all__ = [
     "EvidenceBundle",
     "EvidenceError",
+    "ExtractionResult",
     "FieldEvidence",
     "assert_no_silent_fill",
     "build_evidence",
+    "extraction_source_refs",
+    "from_pdf_bytes",
+    "from_text",
     "EVIDENCE_STATUSES",
 ]
