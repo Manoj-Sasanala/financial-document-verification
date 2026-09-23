@@ -80,3 +80,31 @@ CREATE TABLE IF NOT EXISTS findings (
 
 CREATE INDEX IF NOT EXISTS idx_findings_case_id
     ON findings(case_id);
+
+CREATE TABLE IF NOT EXISTS ai_results (
+    case_id TEXT PRIMARY KEY,
+    ml_classification TEXT NOT NULL CHECK (
+        ml_classification IN (
+            'consistent',
+            'mismatch_detected',
+            'insufficient_evidence'
+        )
+    ),
+    model_version TEXT NOT NULL,
+    retrieval_status TEXT NOT NULL CHECK (
+        retrieval_status IN (
+            'evidence_found',
+            'no_evidence'
+        )
+    ),
+    evidence_refs_json TEXT NOT NULL DEFAULT '[]',
+    explanation_status TEXT NOT NULL CHECK (
+        explanation_status IN (
+            'available',
+            'unavailable',
+            'failed'
+        )
+    ),
+    explanation_text TEXT,
+    FOREIGN KEY (case_id) REFERENCES cases(case_id)
+);
