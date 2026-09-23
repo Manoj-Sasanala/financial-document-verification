@@ -439,6 +439,12 @@ def get_case(db_path: str | Path, case_id: str) -> dict[str, Any]:
         raise RepositoryError("CASE_NOT_FOUND", f"Unknown case: {case_id}.")
     case = dict(row)
     try:
+        from app.db.provenance import load_provenance
+
+        case["provenance"] = load_provenance(db_path, case_id)
+    except RepositoryError:
+        case["provenance"] = None
+    try:
         case["extracted_fields"] = load_extracted_fields(db_path, case_id)
     except RepositoryError:
         case["extracted_fields"] = {}
