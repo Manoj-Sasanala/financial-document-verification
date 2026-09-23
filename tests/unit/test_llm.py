@@ -220,3 +220,90 @@ def test_client_rejects_wrong_prompt() -> None:
     with pytest.raises(_LlmError) as exc_info:
         _explain("not-a-prompt")  # type: ignore[arg-type]
     assert exc_info.value.code == "INVALID_PROMPT"
+
+
+# ---------------------------------------------------------------------------
+# LLM-04: Explanation validation (DoD: contract validated before storage or
+# display; fixed evidence input yields traceable source references)
+# ---------------------------------------------------------------------------
+
+from app.core.contracts import ExplanationResult as _ExplanationResult  # noqa: E402
+from app.llm.validator import (  # noqa: E402
+    ExplanationValidationError as _ExplanationValidationError,
+)
+from app.llm.validator import validate_explanation as _validate_exp
+
+
+def _retrieval_for_assembled():
+    from app.rag.query_builder import build_query as _bq
+    from app.rag.retriever import retrieve as _retrieve
+    from app.document.field_parser import parse_fields as _parse
+    from app.verification.compare import compare_fields as _cmp
+    from app.verification.normalize import normalize_fields as _nf
+    from app.verification.risk_rules import assess_risk as _risk
+    from app.verification.validate import validate_fields as _val
+
+    text = (
+        "Customer Name\nAarav Sharma\nAddress\n42 Example Avenue, Vijayawada\n"
+        "Postal Code\n520001"
+    )
+    ref = {
+        "customer_id": "CUST-0001",
+        "customer_name": "Aarav Mehta",
+        "address": "42 Example Avenue, Vijayawada",
+        "postal_code": "520001",
+    }
+    normalized = _nf(_parse(text).fields)
+    findings = _val(normalized)
+    comparisons = _cmp(normalized, ref)
+    indicators = _risk(findings, comparisons)
+    return _retrieve(_bq(indicators, comparisons))
+
+
+def test_fixed_evidence_input_yields_traceable_refs() -> None:
+    retrieval = _retrieval_for_assembled()
+    assert retrieval.status == "evidence_found"
+    response = _ExplanationResult(
+        status="available",
+        explanation="Name differs; see cited policy.",
+        evidence_refs=[
+            {"source_id": e.source_id, "version": e.version, "chunk_id": e.chunk_id}
+            for e in retrieval.evidence[:1]
+        ],
+    )
+
+    validated = _validate_exp(response, retrieval)
+
+    assert validated.status == "available"
+    assert validated.evidence_refs[0].chunk_id == retrieval.evidence[0].chunk_id
+    assert validated.evidence_refs[0].source_id == retrieval.evidence[0].source_id
+
+
+def test_unknown_reference_downgrades_to_failed() -> None:
+    retrieval = _retrieval_for_assembled()
+    response = _ExplanationResult(
+        status="available",
+        explanation="Cites invented policy.",
+        evidence_refs=[
+            {"source_id": "POL-RISK-999", "version": "1.0.0", "chunk_id": "POL-RISK-999#chunk-001"}
+        ],
+    )
+
+    validated = _validate_exp(response, retrieval)
+
+    assert validated.status == "failed"
+    assert validated.explanation is None
+
+
+def test_unavailable_status_passes_through() -> None:
+    response = _ExplanationResult(status="unavailable", explanation=None, evidence_refs=[])
+
+    validated = _validate_exp(response, None)
+
+    assert validated.status == "unavailable"
+
+
+def test_validator_rejects_wrong_types() -> None:
+    with pytest.raises(_ExplanationValidationError) as exc_info:
+        _validate_exp("not-a-result")  # type: ignore[arg-type]
+    assert exc_info.value.code == "INVALID_INPUT_TYPE"
