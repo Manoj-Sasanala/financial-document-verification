@@ -77,6 +77,12 @@ def _run_analysis(db_path: Path, case_id: str, content: bytes) -> CaseResult:
         explanation_status=result.explanation.status if result.explanation else "unavailable",
         explanation_text=result.explanation.explanation if result.explanation else None,
     )
+    from app.db.provenance import save_provenance
+
+    try:
+        save_provenance(db_path, case_id, result.provenance)
+    except Exception:
+        pass
     return result
 
 
@@ -175,6 +181,13 @@ def get_case(case_id: str) -> CaseResult:
                                 field_name=r["ref"] if r["ref"] != r["code"] else None)
                   for r in stored.get("findings", []) if r.get("kind") == "indicator"]
     ai = stored.get("ai_result") or {}
+    try:
+        from app.db.provenance import load_provenance
+
+        saved_provenance = load_provenance(db_path, case_id)
+        processed_at = datetime.fromisoformat(saved_provenance["processed_at"])
+    except Exception:
+        processed_at = datetime.now(timezone.utc)
     from app.core.contracts import MLResult, RetrievalResult
 
     ml = None
@@ -202,7 +215,7 @@ def get_case(case_id: str) -> CaseResult:
             evidence_refs=[PolicyEvidenceRef(**r) for r in (ai.get("evidence_refs") or [])],
         ) if ai else None,
         review=review,
-        provenance=Provenance(processed_at=datetime.now(timezone.utc), rule_versions=[],
+        provenance=Provenance(processed_at=processed_at, rule_versions=[],
                               policy_source_versions=[]),
         errors=errors,
     )

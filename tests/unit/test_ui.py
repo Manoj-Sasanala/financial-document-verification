@@ -296,3 +296,73 @@ def test_invalid_decision_rejected(tmp_path: Path) -> None:
     assert client.post(
         f"/api/v1/cases/{case_id}/review", json={"decision": "maybe"}
     ).status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# UI-06: Case retrieval view (DoD: retrieval works end to end; stored case
+# reloadable after refresh/restart)
+# ---------------------------------------------------------------------------
+
+
+def test_lookup_section_exists() -> None:
+    html = _html()
+
+    assert 'id="lookup"' in html
+    assert 'id="lookup_case_id"' in html
+    assert 'id="lookup-button"' in html
+
+
+def test_script_loads_cases_by_id() -> None:
+    js = JS_PATH.read_text(encoding="utf-8")
+
+    assert "loadCase" in js
+    assert "/api/v1/cases/" in js
+
+
+def test_stored_case_reloads_without_recompute(tmp_path: Path) -> None:
+    db_path = tmp_path / "ui06.db"
+    initialize_database(db_path)
+    seed_customers(db_path)
+    os.environ["CASE_DB_PATH"] = str(db_path)
+    client = TestClient(app)
+
+    pdf = (PROJECT_ROOT / "data" / "synthetic" / "documents" / "template.pdf").read_bytes()
+    case_id = client.post(
+        "/api/v1/cases",
+        data={"customer_id": "CUST-0001"},
+        files={"file": ("proof.pdf", pdf, "application/pdf")},
+    ).json()["case_id"]
+
+    first = client.get(f"/api/v1/cases/{case_id}").json()
+    second = client.get(f"/api/v1/cases/{case_id}").json()
+
+    assert first == second
+    assert first["fields"]["customer_name"]["raw_value"] == "Aarav Mehta"
+
+
+def test_stored_case_survives_client_restart(tmp_path: Path) -> None:
+    db_path = tmp_path / "ui06b.db"
+    initialize_database(db_path)
+    seed_customers(db_path)
+    os.environ["CASE_DB_PATH"] = str(db_path)
+
+    pdf = (PROJECT_ROOT / "data" / "synthetic" / "documents" / "template.pdf").read_bytes()
+    case_id = TestClient(app).post(
+        "/api/v1/cases",
+        data={"customer_id": "CUST-0001"},
+        files={"file": ("proof.pdf", pdf, "application/pdf")},
+    ).json()["case_id"]
+
+    reloaded = TestClient(app).get(f"/api/v1/cases/{case_id}")
+
+    assert reloaded.status_code == 200
+    assert reloaded.json()["case_id"] == case_id
+
+
+def test_unknown_lookup_is_controlled(tmp_path: Path) -> None:
+    db_path = tmp_path / "ui06c.db"
+    initialize_database(db_path)
+    seed_customers(db_path)
+    os.environ["CASE_DB_PATH"] = str(db_path)
+
+    assert TestClient(app).get("/api/v1/cases/CASE-NOPE").status_code == 404
