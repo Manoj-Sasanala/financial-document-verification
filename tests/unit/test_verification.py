@@ -463,3 +463,87 @@ def test_assessment_is_deterministic() -> None:
     text = _CLEAN_TEXT.replace("Aarav Mehta", "Aarav Sharma")
 
     assert _codes(_pipeline(text, _REF)) == _codes(_pipeline(text, _REF))
+
+
+# ---------------------------------------------------------------------------
+# VER-06: Score boundary lock (DoD: contract documented and enforced;
+# retrieved policy or LLM output cannot mutate deterministic findings)
+# ---------------------------------------------------------------------------
+
+from app.core.contracts import Finding as _Finding  # noqa: E402
+from app.core.contracts import RiskIndicator as _RiskIndicator  # noqa: E402
+from app.verification.boundary import (  # noqa: E402
+    BoundaryError as _BoundaryError,
+)
+from app.verification.boundary import assert_unchanged as _assert_same
+from app.verification.boundary import attach_advisory as _advisory
+from app.verification.boundary import seal_verification as _seal
+
+
+def _sealed_pair():
+    from app.document.field_parser import parse_fields as _parse
+
+    normalized = _nf3(_parse(_CLEAN_TEXT).fields)
+    findings = _validate2(normalized)
+    comparisons = _compare2(normalized, _REF)
+    indicators = _assess(findings, comparisons)
+    return findings, indicators
+
+
+def test_seal_captures_deterministic_outputs() -> None:
+    findings, indicators = _sealed_pair()
+
+    sealed = _seal(findings, indicators)
+
+    assert sealed.digest
+    assert len(sealed.findings) == len(findings)
+    assert len(sealed.indicators) == len(indicators)
+    _assert_same(sealed, findings, indicators)
+
+
+def test_mutated_findings_are_rejected() -> None:
+    findings, indicators = _sealed_pair()
+    sealed = _seal(findings, indicators)
+
+    tampered = [
+        _Finding(field_name="address", code="MISSING_ADDRESS", reason="x", severity="error")
+    ]
+
+    with pytest.raises(_BoundaryError) as exc_info:
+        _assert_same(sealed, tampered, indicators)
+    assert exc_info.value.code == "MUTATION_ATTEMPT"
+
+
+def test_added_indicator_is_rejected() -> None:
+    findings, indicators = _sealed_pair()
+    sealed = _seal(findings, indicators)
+
+    extra = _RiskIndicator(
+        indicator_code="name_mismatch",
+        rule_id="RISK-001",
+        rule_version="1.0.0",
+        severity="warning",
+        reason="injected",
+    )
+
+    with pytest.raises(_BoundaryError) as exc_info:
+        _assert_same(sealed, findings, [*indicators, extra])
+    assert exc_info.value.code == "MUTATION_ATTEMPT"
+
+
+def test_llm_and_rag_outputs_stay_advisory_only() -> None:
+    findings, indicators = _sealed_pair()
+    sealed = _seal(findings, indicators)
+
+    merged = _advisory(
+        sealed,
+        ml_classification="mismatch_detected",
+        policy_refs=[{"source_id": "POL-RISK-001", "version": "1.0.0", "chunk_id": "POL-RISK-001#chunk-001"}],
+        explanation="Name differs from reference.",
+    )
+
+    assert merged.digest == sealed.digest
+    assert len(merged.findings) == len(sealed.findings)
+    assert len(merged.indicators) == len(sealed.indicators)
+    assert len(merged.advisory) == 3
+    _assert_same(merged, findings, indicators)
