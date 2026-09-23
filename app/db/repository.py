@@ -110,6 +110,8 @@ def load_extracted_fields(db_path: str | Path, case_id: str) -> dict[str, dict[s
 
 CUSTOMER_COLUMNS = ("customer_id", "customer_name", "address", "postal_code")
 
+FINDING_KINDS = ("finding", "comparison", "indicator")
+
 
 def get_customer_by_id(
     db_path: str | Path, customer_id: str
@@ -139,9 +141,108 @@ def get_customer_by_id(
     return dict(row) if row is not None else None
 
 
+def save_findings(
+    db_path: str | Path,
+    case_id: str,
+    *,
+    findings: list | None = None,
+    comparisons: list | None = None,
+    indicators: list | None = None,
+) -> int:
+    """Persist validation findings, comparisons and risk indicators.
+
+    Every triggered indicator is stored with rule ID/version, severity,
+    category, reason and observed/reference values for reviewer UI and
+    case retrieval consumers.
+    """
+    from app.core.contracts import FieldComparison, Finding, RiskIndicator
+
+    if not case_id or not str(case_id).strip():
+        raise RepositoryError("EMPTY_CASE_ID", "case_id must be a non-empty string.")
+
+    rows: list[tuple] = []
+    for finding in findings or []:
+        if not isinstance(finding, Finding):
+            raise RepositoryError("INVALID_FINDING", "All findings must be Finding.")
+        rows.append(
+            (case_id, "finding", finding.field_name, finding.code, finding.reason,
+             finding.severity, None, None, None, None, None)
+        )
+    for comparison in comparisons or []:
+        if not isinstance(comparison, FieldComparison):
+            raise RepositoryError("INVALID_COMPARISON", "All comparisons must be FieldComparison.")
+        rows.append(
+            (case_id, "comparison", comparison.field_name, comparison.status, None,
+             None, None, comparison.observed_value, comparison.reference_value, None, None)
+        )
+    for indicator in indicators or []:
+        if not isinstance(indicator, RiskIndicator):
+            raise RepositoryError("INVALID_INDICATOR", "All indicators must be RiskIndicator.")
+        rows.append(
+            (case_id, "indicator", indicator.indicator_code, indicator.indicator_code,
+             indicator.reason, indicator.severity, indicator.category, None, None,
+             indicator.rule_id, indicator.rule_version)
+        )
+    if not rows:
+        raise RepositoryError("EMPTY_FINDINGS", "Nothing to persist: all inputs empty.")
+
+    try:
+        with sqlite3.connect(db_path) as connection:
+            connection.executemany(
+                """
+                INSERT INTO findings (
+                    case_id, kind, ref, code, reason, severity, category,
+                    observed_value, reference_value, rule_id, rule_version
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (case_id, kind, ref, code)
+                DO UPDATE SET
+                    reason = excluded.reason,
+                    severity = excluded.severity,
+                    category = excluded.category,
+                    observed_value = excluded.observed_value,
+                    reference_value = excluded.reference_value,
+                    rule_id = excluded.rule_id,
+                    rule_version = excluded.rule_version
+                """,
+                rows,
+            )
+    except sqlite3.IntegrityError as exc:
+        raise RepositoryError(
+            "INTEGRITY_VIOLATION", f"findings write rejected: {exc}"
+        ) from exc
+    return len(rows)
+
+
+def load_findings(db_path: str | Path, case_id: str) -> list[dict[str, Any]]:
+    """Load all stored finding rows for a case, ordered by kind and ref."""
+    if not case_id or not str(case_id).strip():
+        raise RepositoryError("EMPTY_CASE_ID", "case_id must be a non-empty string.")
+    with sqlite3.connect(db_path) as connection:
+        connection.row_factory = sqlite3.Row
+        rows = connection.execute(
+            """
+            SELECT
+                kind, ref, code, reason, severity, category,
+                observed_value, reference_value, rule_id, rule_version
+            FROM findings
+            WHERE case_id = ?
+            ORDER BY kind, ref, code
+            """,
+            (case_id,),
+        ).fetchall()
+    if not rows:
+        raise RepositoryError("FINDINGS_NOT_FOUND", f"No findings for {case_id}.")
+    return [dict(row) for row in rows]
+
+
 __all__ = [
     "RepositoryError",
     "get_customer_by_id",
     "load_extracted_fields",
+    "load_findings",
     "save_extracted_fields",
+    "save_findings",
+    "CUSTOMER_COLUMNS",
+    "FINDING_KINDS",
 ]

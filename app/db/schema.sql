@@ -55,3 +55,28 @@ CREATE TABLE IF NOT EXISTS extracted_fields (
 
 CREATE INDEX IF NOT EXISTS idx_extracted_fields_case_id
     ON extracted_fields(case_id);
+
+CREATE TABLE IF NOT EXISTS findings (
+    case_id TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (
+        kind IN (
+            'finding',
+            'comparison',
+            'indicator'
+        )
+    ),
+    ref TEXT NOT NULL,
+    code TEXT NOT NULL,
+    reason TEXT,
+    severity TEXT,
+    category TEXT,
+    observed_value TEXT,
+    reference_value TEXT,
+    rule_id TEXT,
+    rule_version TEXT,
+    PRIMARY KEY (case_id, kind, ref, code),
+    FOREIGN KEY (case_id) REFERENCES cases(case_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_findings_case_id
+    ON findings(case_id);

@@ -579,3 +579,124 @@ def test_extracted_fields_survive_restart(tmp_path: Path):
     loaded = load_extracted_fields(db_path, "CASE-DB03-001")
 
     assert loaded["address"]["normalized_value"] == "42 example avenue, vijayawada"
+
+
+# ---------------------------------------------------------------------------
+# DB-04: findings table (DoD: round-trip with provenance; every triggered
+# indicator storable and retrievable)
+# ---------------------------------------------------------------------------
+
+from app.db.repository import (  # noqa: E402
+    load_findings,
+    save_findings,
+)
+
+
+def _db04_pipeline(kind: str = "name"):
+    from app.document.field_parser import parse_fields as _parse
+    from app.verification.compare import compare_fields as _compare
+    from app.verification.normalize import normalize_fields as _nf
+    from app.verification.risk_rules import assess_risk as _assess
+    from app.verification.validate import validate_fields as _validate
+
+    texts = {
+        "name": "Customer Name\nAarav Sharma\nAddress\n42 Example Avenue, Vijayawada\nPostal Code\n520001",
+    }
+    ref = {
+        "customer_id": "CUST-0001",
+        "customer_name": "Aarav Mehta",
+        "address": "42 Example Avenue, Vijayawada",
+        "postal_code": "520001",
+    }
+    normalized = _nf(_parse(texts[kind]).fields)
+    findings = _validate(normalized)
+    comparisons = _compare(normalized, ref)
+    indicators = _assess(findings, comparisons)
+    return findings, comparisons, indicators
+
+
+def test_initialization_creates_findings_table(tmp_path: Path):
+    db_path = tmp_path / "test.db"
+
+    initialize_database(db_path)
+
+    with sqlite3.connect(db_path) as connection:
+        table = connection.execute(
+            """
+            SELECT name
+            FROM sqlite_master
+            WHERE type = 'table' AND name = 'findings'
+            """
+        ).fetchone()
+
+    assert table == ("findings",)
+
+
+def test_triggered_indicators_round_trip_with_provenance(tmp_path: Path):
+    db_path = tmp_path / "test.db"
+
+    initialize_database(db_path)
+    _seed_case(db_path, case_id="CASE-DB04-001")
+
+    findings, comparisons, indicators = _db04_pipeline()
+    assert indicators, "expected at least one triggered indicator"
+
+    count = save_findings(
+        db_path,
+        "CASE-DB04-001",
+        findings=findings,
+        comparisons=comparisons,
+        indicators=indicators,
+    )
+
+    loaded = load_findings(db_path, "CASE-DB04-001")
+
+    assert len(loaded) == count
+    stored = {(row["kind"], row["ref"], row["code"]) for row in loaded}
+    for indicator in indicators:
+        assert ("indicator", indicator.indicator_code, indicator.indicator_code) in stored
+
+    name_row = next(r for r in loaded if r["ref"] == "name_mismatch")
+    assert name_row["rule_id"] == "RISK-001"
+    assert name_row["rule_version"] == "1.0.0"
+    assert name_row["severity"] == "warning"
+    assert name_row["category"] == "verification_mismatch"
+    assert name_row["reason"]
+
+    comparison_row = next(
+        r for r in loaded if r["kind"] == "comparison" and r["ref"] == "customer_name"
+    )
+    assert comparison_row["observed_value"] == "aarav sharma"
+    assert comparison_row["reference_value"] == "aarav mehta"
+
+
+def test_findings_reject_invalid_kind(tmp_path: Path):
+    db_path = tmp_path / "test.db"
+
+    initialize_database(db_path)
+    _seed_case(db_path)
+
+    with sqlite3.connect(db_path) as connection:
+        try:
+            connection.execute(
+                """
+                INSERT INTO findings (case_id, kind, ref, code)
+                VALUES (?, ?, ?, ?)
+                """,
+                ("CASE-DB03-001", "guess", "x", "y"),
+            )
+        except sqlite3.IntegrityError:
+            pass
+        else:
+            raise AssertionError("Invalid finding kind was accepted")
+
+
+def test_load_missing_findings_is_explicit(tmp_path: Path):
+    db_path = tmp_path / "test.db"
+
+    initialize_database(db_path)
+
+    with pytest.raises(RepositoryError) as exc_info:
+        load_findings(db_path, "CASE-NOPE")
+
+    assert exc_info.value.code == "FINDINGS_NOT_FOUND"
