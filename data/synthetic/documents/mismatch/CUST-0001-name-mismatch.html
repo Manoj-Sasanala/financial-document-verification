@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Synthetic Proof of Address</title>
+  <meta name="document-template-version" content="1.0.0">
+
+  <style>
+    @page {
+      size: A4;
+      margin: 22mm;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      color: #111;
+      background: #fff;
+    }
+
+    .document {
+      max-width: 760px;
+      margin: 0 auto;
+      border: 2px solid #222;
+      padding: 28px;
+      box-sizing: border-box;
+    }
+
+    .header {
+      text-align: center;
+      border-bottom: 2px solid #222;
+      padding-bottom: 18px;
+      margin-bottom: 24px;
+    }
+
+    .title {
+      font-size: 26px;
+      font-weight: 700;
+      margin: 0 0 8px;
+    }
+
+    .subtitle {
+      font-size: 13px;
+      margin: 0;
+    }
+
+    .field {
+      display: grid;
+      grid-template-columns: 180px 1fr;
+      gap: 12px;
+      border-bottom: 1px solid #999;
+      padding: 14px 0;
+    }
+
+    .label {
+      font-weight: 700;
+    }
+
+    .value {
+      min-height: 18px;
+    }
+
+    .notice {
+      margin-top: 22px;
+      font-size: 11px;
+      line-height: 1.5;
+    }
+
+    .footer {
+      margin-top: 26px;
+      font-size: 11px;
+      border-top: 1px solid #999;
+      padding-top: 12px;
+    }
+
+    @media print {
+      .document {
+        border: 2px solid #222;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <main
+    class="document"
+    id="proof-of-address-document"
+    data-template-version="1.0.0"
+  >
+
+    <header class="header">
+      <h1 class="title">PROOF OF ADDRESS</h1>
+
+      <p class="subtitle">
+        Synthetic document template — controlled test data only
+      </p>
+    </header>
+
+    <section aria-label="Customer details">
+
+      <div class="field" data-field="customer_id">
+        <div class="label">Customer ID</div>
+        <div class="value">CUST-0001</div>
+      </div>
+
+      <div class="field" data-field="customer_name">
+        <div class="label">Customer Name</div>
+        <div class="value">Aarav Sharma</div>
+      </div>
+
+      <div class="field" data-field="address">
+        <div class="label">Address</div>
+        <div class="value">
+          42 Example Avenue, Vijayawada
+        </div>
+      </div>
+
+      <div class="field" data-field="postal_code">
+        <div class="label">Postal Code</div>
+        <div class="value">520001</div>
+      </div>
+
+    </section>
+
+    <p class="notice">
+      This document is synthetic and exists only for the
+      AI KYC Document Verification &amp; Risk Copilot prototype.
+    </p>
+
+    <footer class="footer">
+      Template version: 1.0.0 · Required fields:
+      customer_id, customer_name, address, postal_code
+    </footer>
+
+  </main>
+</body>
+</html>
