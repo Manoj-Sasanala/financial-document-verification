@@ -48,3 +48,22 @@ pre {
   background: #f4f5f7;
   padding: 12px;
 }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 8px;
+  font-size: 13px;
+}
+
+th, td {
+  border: 1px solid #d7dbe0;
+  padding: 6px 8px;
+  text-align: left;
+}
+
+tr[data-status="missing"] td:last-child,
+tr[data-status="uncertain"] td:last-child {
+  font-weight: bold;
+  color: #b00020;
+}
