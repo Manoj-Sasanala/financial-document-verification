@@ -1,0 +1,63 @@
+{
+  "task_id": "ML-03",
+  "model_version": "1.0.0",
+  "dataset": "data/ml/test.jsonl",
+  "num_examples": 6,
+  "example_ids": [
+    "DATA-06-TEST-001",
+    "DATA-06-TEST-002",
+    "DATA-06-TEST-003",
+    "DATA-06-TEST-004",
+    "DATA-06-TEST-005",
+    "DATA-06-TEST-006"
+  ],
+  "accuracy": 0.6666666666666666,
+  "correct": 4,
+  "per_label": {
+    "consistent": {
+      "correct": 2,
+      "total": 2
+    },
+    "mismatch_detected": {
+      "correct": 1,
+      "total": 2
+    },
+    "insufficient_evidence": {
+      "correct": 1,
+      "total": 2
+    }
+  },
+  "predictions": [
+    {
+      "example_id": "DATA-06-TEST-001",
+      "expected": "consistent",
+      "predicted": "consistent"
+    },
+    {
+      "example_id": "DATA-06-TEST-002",
+      "expected": "consistent",
+      "predicted": "consistent"
+    },
+    {
+      "example_id": "DATA-06-TEST-003",
+      "expected": "mismatch_detected",
+      "predicted": "mismatch_detected"
+    },
+    {
+      "example_id": "DATA-06-TEST-004",
+      "expected": "mismatch_detected",
+      "predicted": "consistent"
+    },
+    {
+      "example_id": "DATA-06-TEST-005",
+      "expected": "insufficient_evidence",
+      "predicted": "insufficient_evidence"
+    },
+    {
+      "example_id": "DATA-06-TEST-006",
+      "expected": "insufficient_evidence",
+      "predicted": "mismatch_detected"
+    }
+  ],
+  "limitation": "Synthetic-only demo data (15 labeled cases); metrics describe prototype behavior on controlled fixtures, not production performance."
+}
