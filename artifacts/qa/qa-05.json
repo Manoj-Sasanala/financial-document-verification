@@ -1,0 +1,13 @@
+{
+  "task_id": "QA-05",
+  "report": "security and file-handling checks",
+  "checklist": "docs/security-checklist.md",
+  "tests": 4,
+  "passed": 4,
+  "suites": {
+    "oversized": "FILE_TOO_LARGE rejected",
+    "executable": "unsupported type rejected",
+    "traversal": "filenames sanitized",
+    "checklist": "all items documented and tested"
+  }
+}
