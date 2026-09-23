@@ -1,0 +1,101 @@
+{
+  "schema_version": "1.0.0",
+  "task_id": "DATA-04",
+  "generator_version": "1.0.0",
+  "template_version": "1.0.0",
+  "synthetic_only": true,
+  "source_customer_file": "data/synthetic/customers.json",
+  "source_template": "data/synthetic/documents/template.html",
+  "scenarios": [
+    {
+      "scenario_id": "DATA-04-CLEAN-001",
+      "scenario_type": "clean",
+      "customer_id": "CUST-0001",
+      "document_path": "data/synthetic/documents/clean/CUST-0001-clean.html",
+      "template_version": "1.0.0",
+      "generator_version": "1.0.0",
+      "ground_truth": {
+        "expected_outcome": "consistent",
+        "mismatch_fields": [],
+        "reference": {
+          "customer_id": "CUST-0001",
+          "customer_name": "Aarav Mehta",
+          "address": "42 Example Avenue, Vijayawada",
+          "postal_code": "520001"
+        },
+        "observed": {
+          "customer_id": "CUST-0001",
+          "customer_name": "Aarav Mehta",
+          "address": "42 Example Avenue, Vijayawada",
+          "postal_code": "520001"
+        }
+      },
+      "provenance": {
+        "source_customer": "data/synthetic/customers.json",
+        "source_template": "data/synthetic/documents/template.html"
+      }
+    },
+    {
+      "scenario_id": "DATA-04-NAME-001",
+      "scenario_type": "name_mismatch",
+      "customer_id": "CUST-0001",
+      "document_path": "data/synthetic/documents/mismatch/CUST-0001-name-mismatch.html",
+      "template_version": "1.0.0",
+      "generator_version": "1.0.0",
+      "ground_truth": {
+        "expected_outcome": "mismatch_detected",
+        "expected_indicator": "name_mismatch",
+        "mismatch_fields": [
+          "customer_name"
+        ],
+        "reference": {
+          "customer_id": "CUST-0001",
+          "customer_name": "Aarav Mehta",
+          "address": "42 Example Avenue, Vijayawada",
+          "postal_code": "520001"
+        },
+        "observed": {
+          "customer_id": "CUST-0001",
+          "customer_name": "Aarav Sharma",
+          "address": "42 Example Avenue, Vijayawada",
+          "postal_code": "520001"
+        }
+      },
+      "provenance": {
+        "source_customer": "data/synthetic/customers.json",
+        "source_template": "data/synthetic/documents/template.html"
+      }
+    },
+    {
+      "scenario_id": "DATA-04-ADDRESS-001",
+      "scenario_type": "address_mismatch",
+      "customer_id": "CUST-0001",
+      "document_path": "data/synthetic/documents/mismatch/CUST-0001-address-mismatch.html",
+      "template_version": "1.0.0",
+      "generator_version": "1.0.0",
+      "ground_truth": {
+        "expected_outcome": "mismatch_detected",
+        "expected_indicator": "address_mismatch",
+        "mismatch_fields": [
+          "address"
+        ],
+        "reference": {
+          "customer_id": "CUST-0001",
+          "customer_name": "Aarav Mehta",
+          "address": "42 Example Avenue, Vijayawada",
+          "postal_code": "520001"
+        },
+        "observed": {
+          "customer_id": "CUST-0001",
+          "customer_name": "Aarav Mehta",
+          "address": "99 Synthetic Street, Vijayawada",
+          "postal_code": "520001"
+        }
+      },
+      "provenance": {
+        "source_customer": "data/synthetic/customers.json",
+        "source_template": "data/synthetic/documents/template.html"
+      }
+    }
+  ]
+}
