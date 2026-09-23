@@ -53,10 +53,58 @@
     });
   }
 
+  function renderComparisons(payload) {
+    var body = document.getElementById("comparisons-body");
+    body.innerHTML = "";
+    (payload.comparisons || []).forEach(function (item) {
+      var row = document.createElement("tr");
+      row.setAttribute("data-field", item.field_name);
+      row.setAttribute("data-status", item.status);
+      [
+        item.field_name,
+        item.status,
+        displayValue(item.observed_value),
+        displayValue(item.reference_value)
+      ].forEach(function (text) {
+        var cell = document.createElement("td");
+        cell.textContent = text;
+        row.appendChild(cell);
+      });
+      body.appendChild(row);
+    });
+  }
+
+  function renderIndicators(payload) {
+    var list = document.getElementById("indicators-list");
+    list.innerHTML = "";
+    (payload.risk_indicators || []).forEach(function (item) {
+      var entry = document.createElement("li");
+      entry.setAttribute("data-indicator", item.indicator_code);
+      entry.setAttribute("data-severity", item.severity);
+      var title = document.createElement("strong");
+      title.textContent = item.indicator_code + " (" + item.severity + ") ";
+      var reason = document.createElement("span");
+      reason.textContent = item.reason || "";
+      var rule = document.createElement("small");
+      rule.textContent = " rule " + (item.rule_id || "?") + " v" + (item.rule_version || "?");
+      entry.appendChild(title);
+      entry.appendChild(reason);
+      entry.appendChild(rule);
+      list.appendChild(entry);
+    });
+    if (!list.children.length) {
+      var none = document.createElement("li");
+      none.textContent = "No attention signals.";
+      list.appendChild(none);
+    }
+  }
+
   function showResult(payload) {
     document.getElementById("error").hidden = true;
     document.getElementById("result-status").textContent = payload.status || "unknown";
     renderFields(payload);
+    renderComparisons(payload);
+    renderIndicators(payload);
     document.getElementById("result-body").textContent = JSON.stringify(payload, null, 2);
     document.getElementById("result").hidden = false;
   }
