@@ -172,3 +172,128 @@ def test_missing_chunk_manifest_is_explicit() -> None:
     with pytest.raises(MetadataError) as exc_info:
         read_chunks_jsonl("artifacts/rag/does-not-exist.jsonl")
     assert exc_info.value.code == "CHUNKS_NOT_FOUND"
+
+
+# ---------------------------------------------------------------------------
+# RAG-05: Case-to-query builder (DoD: implemented + one unit test per
+# indicator family; same findings yield the same query)
+# ---------------------------------------------------------------------------
+
+from app.verification.compare import compare_fields as _cmp  # noqa: E402
+from app.verification.normalize import normalize_fields as _nf  # noqa: E402
+from app.verification.risk_rules import assess_risk as _risk  # noqa: E402
+from app.verification.validate import validate_fields as _val  # noqa: E402
+
+
+def _outcome(text: str, ref: dict | None, **kwargs):
+    from app.document.field_parser import parse_fields as _parse
+
+    normalized = _nf(_parse(text).fields)
+    findings = _val(normalized)
+    comparisons = _cmp(normalized, ref)
+    indicators = _risk(findings, comparisons, **kwargs)
+    return findings, comparisons, indicators
+
+
+_REF01 = {
+    "customer_id": "CUST-0001",
+    "customer_name": "Aarav Mehta",
+    "address": "42 Example Avenue, Vijayawada",
+    "postal_code": "520001",
+}
+_CLEAN = (
+    "Customer Name\nAarav Mehta\nAddress\n42 Example Avenue, Vijayawada\n"
+    "Postal Code\n520001"
+)
+
+
+def test_query_for_name_mismatch_family() -> None:
+    from app.rag.query_builder import build_query
+
+    _, comparisons, indicators = _outcome(_CLEAN.replace("Aarav Mehta", "Aarav Sharma"), _REF01)
+    query = build_query(indicators, comparisons)
+
+    assert "indicator name_mismatch field customer_name" in query.query_text
+    assert "mismatch customer_name" in query.query_text
+    assert query.indicator_codes == ["name_mismatch"]
+
+
+def test_query_for_address_mismatch_family() -> None:
+    from app.rag.query_builder import build_query
+
+    _, comparisons, indicators = _outcome(
+        _CLEAN.replace("42 Example Avenue, Vijayawada", "99 Synthetic Street, Vijayawada"),
+        _REF01,
+    )
+
+    assert "indicator address_mismatch field address" in build_query(indicators, comparisons).query_text
+
+
+def test_query_for_missing_field_family() -> None:
+    from app.rag.query_builder import build_query
+
+    _, comparisons, indicators = _outcome(
+        "Customer Name\nAarav Mehta\nAddress\n\nPostal Code\n520001", _REF01
+    )
+
+    assert "indicator missing_required_field field address" in build_query(
+        indicators, comparisons
+    ).query_text
+
+
+def test_query_for_invalid_date_family() -> None:
+    from app.rag.query_builder import build_query
+
+    _, comparisons, indicators = _outcome(_CLEAN + "\nDocument Date\n2026-02-30", _REF01)
+
+    assert "indicator invalid_document_date" in build_query(indicators, comparisons).query_text
+
+
+def test_query_for_unknown_customer_family() -> None:
+    from app.rag.query_builder import build_query
+
+    _, comparisons, indicators = _outcome(_CLEAN, None, reference_found=False)
+
+    assert "indicator reference_customer_not_found" in build_query(
+        indicators, comparisons
+    ).query_text
+
+
+def test_query_for_unsupported_document_family() -> None:
+    from app.rag.query_builder import build_query
+
+    _, comparisons, indicators = _outcome(
+        _CLEAN, _REF01, document_type="utility_service_notice"
+    )
+
+    assert "indicator unsupported_document_type" in build_query(
+        indicators, comparisons
+    ).query_text
+
+
+def test_same_findings_yield_same_query() -> None:
+    from app.rag.query_builder import build_query
+
+    _, comparisons, indicators = _outcome(_CLEAN.replace("Aarav Mehta", "Aarav Sharma"), _REF01)
+
+    assert build_query(indicators, comparisons).query_text == build_query(
+        indicators, comparisons
+    ).query_text
+
+
+def test_clean_case_yields_baseline_query() -> None:
+    from app.rag.query_builder import build_query
+
+    _, comparisons, indicators = _outcome(_CLEAN, _REF01)
+    query = build_query(indicators, comparisons)
+
+    assert query.indicator_codes == []
+    assert "baseline proof-of-address verification policy" in query.query_text
+
+
+def test_empty_comparisons_is_explicit() -> None:
+    from app.rag.query_builder import QueryError, build_query
+
+    with pytest.raises(QueryError) as exc_info:
+        build_query([], [])
+    assert exc_info.value.code == "EMPTY_COMPARISONS"
