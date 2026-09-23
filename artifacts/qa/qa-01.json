@@ -1,0 +1,13 @@
+{
+  "task_id": "QA-01",
+  "report": "endpoint integration tests",
+  "contracts": ["API-C01", "API-C02", "API-C03", "API-C04"],
+  "test_file": "tests/integration/test_api.py",
+  "tests": 7,
+  "passed": 7,
+  "suites": {
+    "lifecycle": "create/retrieve/review/retrieve",
+    "failures": "404/422/400",
+    "contracts": "health/openapi/CaseResult schema"
+  }
+}

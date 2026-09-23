@@ -92,3 +92,52 @@ def test_unsupported_file_returns_400(tmp_path: Path) -> None:
     )
 
     assert response.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# QA-01: Endpoint integration tests (DoD: core endpoint tests pass across
+# API-C01 health, API-C02 create/analyze, API-C03 retrieval, API-C04 review)
+# ---------------------------------------------------------------------------
+
+
+def test_health_endpoint_contract(tmp_path: Path) -> None:
+    client = _client(tmp_path)
+
+    response = client.get("/api/v1/health")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
+def test_openapi_exposes_case_lifecycle_routes(tmp_path: Path) -> None:
+    client = _client(tmp_path)
+
+    paths = client.get("/openapi.json").json()["paths"]
+
+    assert "/api/v1/health" in paths
+    assert "/api/v1/cases" in paths
+    assert "/api/v1/cases/{case_id}" in paths
+    assert "/api/v1/cases/{case_id}/review" in paths
+
+
+def test_create_returns_frozen_case_result_schema(tmp_path: Path) -> None:
+    client = _client(tmp_path)
+    created = _create_case(client)
+
+    assert set(created.keys()) == {
+        "case_id",
+        "status",
+        "fields",
+        "normalized_fields",
+        "validation",
+        "comparisons",
+        "risk_indicators",
+        "ml_classification",
+        "policy_evidence",
+        "explanation",
+        "review",
+        "provenance",
+        "errors",
+    }
+    assert created["provenance"]["processed_at"]
+    assert isinstance(created["errors"], list)
