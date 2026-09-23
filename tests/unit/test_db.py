@@ -700,3 +700,122 @@ def test_load_missing_findings_is_explicit(tmp_path: Path):
         load_findings(db_path, "CASE-NOPE")
 
     assert exc_info.value.code == "FINDINGS_NOT_FOUND"
+
+
+# ---------------------------------------------------------------------------
+# DB-05: ai_results table (DoD: round-trip passes; AI metadata retrievable
+# by case_id)
+# ---------------------------------------------------------------------------
+
+from app.db.repository import (  # noqa: E402
+    load_ai_result,
+    save_ai_result,
+)
+
+
+def _seed_ai_case(db_path: Path, case_id: str = "CASE-DB05-001"):
+    _seed_case(db_path, case_id=case_id)
+
+
+def test_initialization_creates_ai_results_table(tmp_path: Path):
+    db_path = tmp_path / "test.db"
+
+    initialize_database(db_path)
+
+    with sqlite3.connect(db_path) as connection:
+        table = connection.execute(
+            """
+            SELECT name
+            FROM sqlite_master
+            WHERE type = 'table' AND name = 'ai_results'
+            """
+        ).fetchone()
+
+    assert table == ("ai_results",)
+
+
+def test_ai_result_round_trip_by_case_id(tmp_path: Path):
+    db_path = tmp_path / "test.db"
+
+    initialize_database(db_path)
+    _seed_ai_case(db_path)
+
+    refs = [
+        {"source_id": "POL-RISK-001", "version": "1.0.0", "chunk_id": "POL-RISK-001#chunk-001"}
+    ]
+    save_ai_result(
+        db_path,
+        "CASE-DB05-001",
+        ml_classification="mismatch_detected",
+        model_version="1.0.0",
+        retrieval_status="evidence_found",
+        evidence_refs=refs,
+        explanation_status="available",
+        explanation_text="Name differs from reference.",
+    )
+
+    loaded = load_ai_result(db_path, "CASE-DB05-001")
+
+    assert loaded["ml_classification"] == "mismatch_detected"
+    assert loaded["model_version"] == "1.0.0"
+    assert loaded["retrieval_status"] == "evidence_found"
+    assert loaded["evidence_refs"] == refs
+    assert loaded["explanation_status"] == "available"
+    assert loaded["explanation_text"] == "Name differs from reference."
+
+
+def test_ai_result_rejects_invalid_classification(tmp_path: Path):
+    db_path = tmp_path / "test.db"
+
+    initialize_database(db_path)
+    _seed_ai_case(db_path)
+
+    with sqlite3.connect(db_path) as connection:
+        try:
+            connection.execute(
+                """
+                INSERT INTO ai_results (
+                    case_id,
+                    ml_classification,
+                    model_version,
+                    retrieval_status,
+                    explanation_status
+                )
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                ("CASE-DB05-001", "guessed", "1.0.0", "evidence_found", "available"),
+            )
+        except sqlite3.IntegrityError:
+            pass
+        else:
+            raise AssertionError("Invalid ML classification was accepted")
+
+
+def test_ai_result_save_validates_contracts(tmp_path: Path):
+    db_path = tmp_path / "test.db"
+
+    initialize_database(db_path)
+    _seed_ai_case(db_path)
+
+    with pytest.raises(RepositoryError) as exc_info:
+        save_ai_result(
+            db_path,
+            "CASE-DB05-001",
+            ml_classification="mismatch_detected",
+            model_version="1.0.0",
+            retrieval_status="evidence_found",
+            evidence_refs=[{"source_id": "POL-RISK-001"}],
+            explanation_status="available",
+        )
+    assert exc_info.value.code == "INVALID_EVIDENCE_REF"
+
+
+def test_load_missing_ai_result_is_explicit(tmp_path: Path):
+    db_path = tmp_path / "test.db"
+
+    initialize_database(db_path)
+
+    with pytest.raises(RepositoryError) as exc_info:
+        load_ai_result(db_path, "CASE-NOPE")
+
+    assert exc_info.value.code == "AI_RESULT_NOT_FOUND"

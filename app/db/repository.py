@@ -236,11 +236,126 @@ def load_findings(db_path: str | Path, case_id: str) -> list[dict[str, Any]]:
     return [dict(row) for row in rows]
 
 
+def save_ai_result(
+    db_path: str | Path,
+    case_id: str,
+    *,
+    ml_classification: str,
+    model_version: str,
+    retrieval_status: str,
+    evidence_refs: list[dict[str, str]] | None = None,
+    explanation_status: str,
+    explanation_text: str | None = None,
+) -> str:
+    """Upsert one AI result row per case; returns the case_id."""
+    import json as _json
+
+    from app.core.contracts import ExplanationResult, MLResult, RetrievalResult
+
+    if not case_id or not str(case_id).strip():
+        raise RepositoryError("EMPTY_CASE_ID", "case_id must be a non-empty string.")
+    try:
+        MLResult(classification=ml_classification, model_version=model_version)  # type: ignore[arg-type]
+    except Exception as exc:
+        raise RepositoryError("INVALID_ML_RESULT", f"Invalid ML result: {exc}") from exc
+    try:
+        RetrievalResult(status=retrieval_status, evidence=[])  # type: ignore[arg-type]
+    except Exception as exc:
+        raise RepositoryError("INVALID_RETRIEVAL", f"Invalid retrieval status: {exc}") from exc
+    try:
+        ExplanationResult(
+            status=explanation_status, explanation=explanation_text, evidence_refs=[]  # type: ignore[arg-type]
+        )
+    except Exception as exc:
+        raise RepositoryError("INVALID_EXPLANATION", f"Invalid explanation status: {exc}") from exc
+    if not model_version or not str(model_version).strip():
+        raise RepositoryError("VERSION_MISSING", "model_version must be non-empty.")
+
+    refs = evidence_refs or []
+    for ref in refs:
+        if not {"source_id", "version", "chunk_id"} <= set(ref):
+            raise RepositoryError("INVALID_EVIDENCE_REF", f"Bad evidence ref: {ref!r}.")
+
+    try:
+        with sqlite3.connect(db_path) as connection:
+            connection.execute(
+                """
+                INSERT INTO ai_results (
+                    case_id,
+                    ml_classification,
+                    model_version,
+                    retrieval_status,
+                    evidence_refs_json,
+                    explanation_status,
+                    explanation_text
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (case_id)
+                DO UPDATE SET
+                    ml_classification = excluded.ml_classification,
+                    model_version = excluded.model_version,
+                    retrieval_status = excluded.retrieval_status,
+                    evidence_refs_json = excluded.evidence_refs_json,
+                    explanation_status = excluded.explanation_status,
+                    explanation_text = excluded.explanation_text
+                """,
+                (
+                    case_id,
+                    ml_classification,
+                    model_version,
+                    retrieval_status,
+                    _json.dumps(refs),
+                    explanation_status,
+                    explanation_text,
+                ),
+            )
+    except sqlite3.IntegrityError as exc:
+        raise RepositoryError(
+            "INTEGRITY_VIOLATION", f"ai_results write rejected: {exc}"
+        ) from exc
+    return case_id
+
+
+def load_ai_result(db_path: str | Path, case_id: str) -> dict[str, Any]:
+    """Load the AI result row for a case, with evidence refs decoded."""
+    import json as _json
+
+    if not case_id or not str(case_id).strip():
+        raise RepositoryError("EMPTY_CASE_ID", "case_id must be a non-empty string.")
+    with sqlite3.connect(db_path) as connection:
+        connection.row_factory = sqlite3.Row
+        row = connection.execute(
+            """
+            SELECT
+                case_id,
+                ml_classification,
+                model_version,
+                retrieval_status,
+                evidence_refs_json,
+                explanation_status,
+                explanation_text
+            FROM ai_results
+            WHERE case_id = ?
+            """,
+            (case_id,),
+        ).fetchone()
+    if row is None:
+        raise RepositoryError("AI_RESULT_NOT_FOUND", f"No AI result for {case_id}.")
+    record = dict(row)
+    try:
+        record["evidence_refs"] = _json.loads(record.pop("evidence_refs_json"))
+    except Exception as exc:
+        raise RepositoryError("INVALID_EVIDENCE_REF", f"Stored refs unreadable: {exc}") from exc
+    return record
+
+
 __all__ = [
     "RepositoryError",
     "get_customer_by_id",
+    "load_ai_result",
     "load_extracted_fields",
     "load_findings",
+    "save_ai_result",
     "save_extracted_fields",
     "save_findings",
     "CUSTOMER_COLUMNS",
