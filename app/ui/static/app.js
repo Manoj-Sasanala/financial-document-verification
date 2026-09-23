@@ -176,7 +176,34 @@
     document.getElementById("result").hidden = false;
   }
 
+  function loadCase() {
+    var input = document.getElementById("lookup_case_id");
+    var caseId = (input.value || "").trim();
+    if (!caseId) {
+      showError("Enter a case ID to load.");
+      return;
+    }
+    fetch("/api/v1/cases/" + encodeURIComponent(caseId))
+      .then(function (response) {
+        if (!response.ok) {
+          return response.json().then(function (body) {
+            throw new Error(body.detail || ("Load failed: " + response.status));
+          });
+        }
+        return response.json();
+      })
+      .then(showResult)
+      .catch(function (err) {
+        showError(err && err.message ? err.message : "Load failed.");
+      });
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
+    var lookup = document.getElementById("lookup-button");
+    if (lookup) {
+      lookup.addEventListener("click", loadCase);
+    }
+
     var buttons = document.querySelectorAll("#decision-controls button[data-decision]");
     buttons.forEach(function (button) {
       button.addEventListener("click", function () {
