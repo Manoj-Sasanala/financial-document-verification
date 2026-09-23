@@ -34,3 +34,24 @@ CREATE TABLE IF NOT EXISTS cases (
 
 CREATE INDEX IF NOT EXISTS idx_cases_customer_id
     ON cases(customer_id);
+
+CREATE TABLE IF NOT EXISTS extracted_fields (
+    case_id TEXT NOT NULL,
+    field_name TEXT NOT NULL,
+    raw_value TEXT,
+    normalized_value TEXT,
+    status TEXT NOT NULL CHECK (
+        status IN (
+            'present',
+            'missing',
+            'uncertain'
+        )
+    ),
+    source_page INTEGER,
+    source_reference TEXT,
+    PRIMARY KEY (case_id, field_name),
+    FOREIGN KEY (case_id) REFERENCES cases(case_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_extracted_fields_case_id
+    ON extracted_fields(case_id);
