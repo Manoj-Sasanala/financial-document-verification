@@ -422,3 +422,67 @@ def test_missing_index_is_explicit(tmp_path) -> None:
 
 def test_rebuilt_index_matches_committed_count() -> None:
     assert _build_index().ntotal == _load_index().ntotal == 35
+
+
+# ---------------------------------------------------------------------------
+# RAG-06: Policy retrieval (DoD: works independently; known scenario returns
+# relevant evidence and no-evidence behavior is controlled)
+# ---------------------------------------------------------------------------
+
+from app.core.contracts import RetrievalResult as _RetrievalResult  # noqa: E402
+from app.rag.query_builder import build_query as _build_query  # noqa: E402
+from app.rag.retriever import retrieve as _retrieve  # noqa: E402
+
+
+def test_known_scenario_returns_relevant_evidence() -> None:
+    _, comparisons, indicators = _outcome(_CLEAN.replace("Aarav Mehta", "Aarav Sharma"), _REF01)
+    result = _retrieve(_build_query(indicators, comparisons))
+
+    assert isinstance(result, _RetrievalResult)
+    assert result.status == "evidence_found"
+    assert result.evidence
+    sources = {e.source_id for e in result.evidence}
+    assert "POL-RISK-001" in sources
+    for item in result.evidence:
+        assert item.version == "1.0.0"
+        assert item.chunk_id.startswith(item.source_id + "#chunk-")
+        assert item.text and item.text.strip()
+
+
+def test_clean_case_returns_generic_evidence() -> None:
+    _, comparisons, indicators = _outcome(_CLEAN, _REF01)
+    result = _retrieve(_build_query(indicators, comparisons))
+
+    assert result.status == "evidence_found"
+    assert len(result.evidence) <= 3
+
+
+def test_gibberish_query_returns_controlled_no_evidence() -> None:
+    from app.rag.query_builder import RetrievalQuery as _RQ
+
+    query = _RQ(
+        query_text="zxqwqx jjjjj vvvv qqqq zzzz",
+        indicator_codes=[],
+        mismatch_fields=[],
+    )
+    result = _retrieve(query)
+
+    assert result.status == "no_evidence"
+    assert result.evidence == []
+
+
+def test_retrieval_is_deterministic() -> None:
+    _, comparisons, indicators = _outcome(_CLEAN, _REF01)
+    first = _retrieve(_build_query(indicators, comparisons))
+    second = _retrieve(_build_query(indicators, comparisons))
+
+    assert [e.chunk_id for e in first.evidence] == [e.chunk_id for e in second.evidence]
+
+
+def test_empty_query_text_is_explicit() -> None:
+    from app.rag.query_builder import RetrievalQuery as _RQ
+    from app.rag.retriever import RetrievalError as _RetrievalError
+
+    with pytest.raises(_RetrievalError) as exc_info:
+        _retrieve(_RQ(query_text="   ", indicator_codes=[], mismatch_fields=[]))
+    assert exc_info.value.code == "EMPTY_QUERY"
