@@ -1,0 +1,26 @@
+# DEP-02: persistent SQLite storage for the demo deployment.
+#
+# The named volume kyc-data persists CASE_DB_PATH across container restarts
+# and image rebuilds. Requires a Docker daemon (see docs/deployment.md).
+
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      CASE_DB_PATH: /data/db.sqlite3
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_API_URL: ${LLM_API_URL:-}
+      LLM_MODEL: ${LLM_MODEL:-demo-explainer-1.0}
+      LLM_TIMEOUT_S: ${LLM_TIMEOUT_S:-30}
+    volumes:
+      - kyc-data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  kyc-data:
