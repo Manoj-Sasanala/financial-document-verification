@@ -184,3 +184,82 @@ def test_llm_timeout_returns_controlled_failed_explanation(tmp_path: Path) -> No
     assert result.explanation is not None
     assert result.explanation.status == "failed"
     assert [i.indicator_code for i in result.risk_indicators] == ["name_mismatch"]
+
+
+# ---------------------------------------------------------------------------
+# QA-05: Security/file-handling checks (DoD: checklist passes with no known
+# secret/file-handling defect; unsupported/oversized rejected, secrets safe)
+# ---------------------------------------------------------------------------
+
+
+def test_oversized_upload_is_rejected(tmp_path: Path) -> None:
+    import os
+
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    db_path = tmp_path / "sec.db"
+    initialize_database(db_path)
+    seed_customers(db_path)
+    os.environ["CASE_DB_PATH"] = str(db_path)
+    client = TestClient(app)
+
+    big = b"%PDF-1.4\n" + b"0" * (11 * 1024 * 1024)
+    response = client.post(
+        "/api/v1/cases",
+        data={"customer_id": "CUST-0001"},
+        files={"file": ("big.pdf", big, "application/pdf")},
+    )
+
+    assert response.status_code == 400
+    assert "FILE_TOO_LARGE" in response.json()["detail"]
+
+
+def test_executable_upload_is_rejected(tmp_path: Path) -> None:
+    import os
+
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    db_path = tmp_path / "sec2.db"
+    initialize_database(db_path)
+    seed_customers(db_path)
+    os.environ["CASE_DB_PATH"] = str(db_path)
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/v1/cases",
+        data={"customer_id": "CUST-0001"},
+        files={"file": ("run.exe", b"MZ" + b"\x00" * 100, "application/octet-stream")},
+    )
+
+    assert response.status_code == 400
+
+
+def test_path_traversal_filename_is_sanitized() -> None:
+    from app.document.upload_validation import validate_upload
+
+    result = validate_upload(
+        "../../etc/passwd.pdf", b"%PDF-1.4\ncontent", content_type="application/pdf"
+    )
+
+    assert "/" not in result.filename
+    assert "\\" not in result.filename
+    assert result.filename == "passwd.pdf"
+
+
+def test_security_checklist_is_complete() -> None:
+    checklist = (
+        Path(__file__).resolve().parents[2] / "docs" / "security-checklist.md"
+    ).read_text(encoding="utf-8")
+
+    for item in (
+        "FILE_TOO_LARGE",
+        "UNSUPPORTED_FILE_TYPE",
+        "INVALID_FILE_SIGNATURE",
+        "server-side",
+        ".env",
+    ):
+        assert item in checklist
