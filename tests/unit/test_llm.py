@@ -99,3 +99,66 @@ def test_wrong_record_types_are_explicit() -> None:
     with pytest.raises(InputError) as exc_info:
         build_explanation_input("X", ["nope"], [], [])
     assert exc_info.value.code == "INVALID_RECORD"
+
+
+# ---------------------------------------------------------------------------
+# LLM-02: Grounded explanation prompt (DoD: fixed payload renders the
+# intended structure; prompt forbids unsupported facts, cites evidence)
+# ---------------------------------------------------------------------------
+
+from app.llm.prompt import (  # noqa: E402
+    PROMPT_VERSION as _PROMPT_VERSION,
+)
+from app.llm.prompt import PromptError as _PromptError
+from app.llm.prompt import build_prompt as _build_prompt
+
+
+def test_fixed_payload_produces_intended_structure() -> None:
+    from app.llm.prompt import PROMPT_VERSION_PATH as _PVP
+
+    result = _build_prompt(_assembled())
+
+    assert result.prompt_version == _PROMPT_VERSION == "1.0.0"
+    assert "FACTS" in result.prompt_text
+    assert "EVIDENCE" in result.prompt_text
+    assert "comparison customer_name mismatch" in result.prompt_text
+    assert "indicator name_mismatch RISK-001" in result.prompt_text
+    assert result.evidence_refs
+    assert all(r.startswith("POL-RISK-") and "#chunk-" in r for r in result.evidence_refs)
+    assert _PVP.is_file()
+
+
+def test_prompt_forbids_unsupported_facts() -> None:
+    result = _build_prompt(_assembled())
+
+    assert "NEVER invent policy rules, chunk IDs, field values, or rule IDs" in result.prompt_text
+    assert "Use ONLY the structured facts" in result.prompt_text
+
+
+def test_prompt_identifies_source_evidence() -> None:
+    result = _build_prompt(_assembled())
+
+    for ref in result.evidence_refs:
+        assert f"[{ref}]" in result.prompt_text
+
+
+def test_prompt_is_deterministic() -> None:
+    assert _build_prompt(_assembled()).prompt_text == _build_prompt(_assembled()).prompt_text
+
+
+def test_prompt_version_metadata_matches() -> None:
+    import json as _json
+
+    from app.llm.prompt import PROMPT_VERSION_PATH as _PVP
+
+    record = _json.loads(_PVP.read_text(encoding="utf-8"))
+
+    assert record["prompt_version"] == _PROMPT_VERSION
+    assert record["input_schema_version"] == "1.0.0"
+    assert len(record["template_sha256"]) == 64
+
+
+def test_prompt_rejects_wrong_input() -> None:
+    with pytest.raises(_PromptError) as exc_info:
+        _build_prompt("not-a-payload")  # type: ignore[arg-type]
+    assert exc_info.value.code == "INVALID_INPUT"
