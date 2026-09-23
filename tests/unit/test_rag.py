@@ -297,3 +297,68 @@ def test_empty_comparisons_is_explicit() -> None:
     with pytest.raises(QueryError) as exc_info:
         build_query([], [])
     assert exc_info.value.code == "EMPTY_COMPARISONS"
+
+
+# ---------------------------------------------------------------------------
+# RAG-03: Local embeddings (DoD: all chunks have vectors + model metadata;
+# one fixed embedding model/version)
+# ---------------------------------------------------------------------------
+
+import numpy as _np  # noqa: E402
+
+from app.rag.embeddings import (  # noqa: E402
+    EMBEDDINGS_PATH as _EMB_PATH,
+)
+from app.rag.embeddings import METADATA_PATH as _META_PATH
+from app.rag.embeddings import MODEL_ID as _MODEL_ID
+from app.rag.embeddings import read_chunk_texts as _read_texts
+
+
+def test_embeddings_cover_all_chunks() -> None:
+    import json as _json
+
+    assert _EMB_PATH.is_file(), f"Missing {_EMB_PATH}"
+    matrix = _np.load(_EMB_PATH)
+    chunk_ids, _ = _read_texts()
+
+    assert matrix.shape == (35, 384)
+    assert str(matrix.dtype) == "float32"
+    assert len(chunk_ids) == matrix.shape[0]
+
+    with (PROJECT_ROOT / "artifacts" / "rag" / "chunks.jsonl").open(
+        "r", encoding="utf-8"
+    ) as fh:
+        manifest_ids = [_json.loads(line)["chunk_id"] for line in fh if line.strip()]
+    assert chunk_ids == manifest_ids
+
+
+def test_embeddings_are_normalized() -> None:
+    matrix = _np.load(_EMB_PATH)
+    norms = _np.linalg.norm(matrix, axis=1)
+
+    assert all(abs(n - 1.0) < 1e-4 for n in norms)
+
+
+def test_single_fixed_model_version_recorded() -> None:
+    import json as _json
+
+    metadata = _json.loads(_META_PATH.read_text(encoding="utf-8"))
+
+    assert metadata["model_id"] == _MODEL_ID == "sentence-transformers/all-MiniLM-L6-v2"
+    assert metadata["embedding_dim"] == 384
+    assert metadata["num_chunks"] == 35
+    assert metadata["normalized"] is True
+    assert len(metadata["chunk_ids"]) == 35
+    assert metadata["chunks_manifest"] == "artifacts/rag/chunks.jsonl"
+
+
+def test_rebuild_is_deterministic() -> None:
+    from app.rag.embeddings import embed_texts as _embed
+    from app.rag.embeddings import load_model as _load_model
+
+    _, texts = _read_texts()
+    model = _load_model()
+    rebuilt = _embed(texts[:3], model)
+    stored = _np.load(_EMB_PATH)[:3]
+
+    assert _np.allclose(rebuilt, stored, atol=1e-5)
