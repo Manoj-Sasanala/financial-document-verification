@@ -1,0 +1,12 @@
+{
+  "task_id": "QA-07",
+  "report": "ML/RAG artifacts load once at startup",
+  "test_file": "tests/integration/test_startup_loading.py",
+  "tests": 3,
+  "passed": 3,
+  "suites": {
+    "startup": "ML model 1.0.0 + FAISS index 35 rows load with no errors",
+    "reuse": "requests share identical loaded objects",
+    "degraded": "missing artifacts recorded, never raised"
+  }
+}
