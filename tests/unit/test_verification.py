@@ -359,3 +359,107 @@ def test_compare_rejects_wrong_input() -> None:
     with pytest.raises(_ComparisonError) as exc_info:
         _compare("not-fields", _REF)  # type: ignore[arg-type]
     assert exc_info.value.code == "INVALID_INPUT_TYPE"
+
+
+# ---------------------------------------------------------------------------
+# VER-05: Deterministic risk indicators (DoD: rule IDs, severity/category,
+# reason and field returned deterministically; every scenario triggers
+# exactly the expected indicators)
+# ---------------------------------------------------------------------------
+
+from app.verification.compare import compare_fields as _compare2  # noqa: E402
+from app.verification.normalize import normalize_fields as _nf3  # noqa: E402
+from app.verification.risk_rules import (  # noqa: E402
+    RULE_VERSION as _RULE_VERSION,
+)
+from app.verification.risk_rules import assess_risk as _assess
+from app.verification.risk_rules import indicator_codes as _codes
+from app.verification.validate import validate_fields as _validate2
+
+
+def _pipeline(text: str, ref: dict | None, *, reference_found: bool = True, document_type=None):
+    from app.document.field_parser import parse_fields as _parse
+
+    normalized = _nf3(_parse(text).fields)
+    findings = _validate2(normalized)
+    comparisons = _compare2(normalized, ref)
+    return _assess(
+        findings, comparisons,
+        reference_found=reference_found, document_type=document_type,
+    )
+
+
+_CLEAN_TEXT = (
+    "Customer Name\nAarav Mehta\nAddress\n42 Example Avenue, Vijayawada\n"
+    "Postal Code\n520001"
+)
+
+
+def test_clean_case_triggers_no_indicators() -> None:
+    assert _assess([], _compare2(_doc(_CLEAN_TEXT), _REF)) == []
+    assert _codes(_pipeline(_CLEAN_TEXT, _REF)) == []
+
+
+def test_name_mismatch_triggers_exactly_name_indicator() -> None:
+    text = _CLEAN_TEXT.replace("Aarav Mehta", "Aarav Sharma")
+
+    indicators = _pipeline(text, _REF)
+
+    assert _codes(indicators) == ["name_mismatch"]
+    assert indicators[0].rule_id == "RISK-001"
+    assert indicators[0].rule_version == _RULE_VERSION
+    assert indicators[0].field_name == "customer_name"
+    assert indicators[0].severity and indicators[0].category and indicators[0].reason
+
+
+def test_address_mismatch_triggers_exactly_address_indicator() -> None:
+    text = _CLEAN_TEXT.replace("42 Example Avenue, Vijayawada", "99 Synthetic Street, Vijayawada")
+
+    assert _codes(_pipeline(text, _REF)) == ["address_mismatch"]
+
+
+def test_missing_address_triggers_missing_field_indicator() -> None:
+    text = "Customer Name\nAarav Mehta\nAddress\n\nPostal Code\n520001"
+
+    indicators = _pipeline(text, _REF)
+
+    assert _codes(indicators) == ["missing_required_field"]
+    assert indicators[0].rule_id == "RISK-003"
+    assert indicators[0].field_name == "address"
+
+
+def test_invalid_date_triggers_invalid_date_indicator() -> None:
+    text = _CLEAN_TEXT + "\nDocument Date\n2026-02-30"
+
+    indicators = _pipeline(text, _REF)
+
+    assert _codes(indicators) == ["invalid_document_date"]
+    assert indicators[0].rule_id == "RISK-004"
+
+
+def test_unknown_customer_triggers_not_found_indicator() -> None:
+    indicators = _pipeline(_CLEAN_TEXT, None, reference_found=False)
+
+    assert _codes(indicators) == ["reference_customer_not_found"]
+    assert indicators[0].rule_id == "RISK-005"
+
+
+def test_unsupported_document_type_triggers_indicator() -> None:
+    indicators = _pipeline(
+        _CLEAN_TEXT, _REF, document_type="utility_service_notice"
+    )
+
+    assert _codes(indicators) == ["unsupported_document_type"]
+    assert indicators[0].rule_id == "RISK-006"
+
+
+def test_supported_document_type_triggers_nothing() -> None:
+    indicators = _pipeline(_CLEAN_TEXT, _REF, document_type="Proof of Address")
+
+    assert _codes(indicators) == []
+
+
+def test_assessment_is_deterministic() -> None:
+    text = _CLEAN_TEXT.replace("Aarav Mehta", "Aarav Sharma")
+
+    assert _codes(_pipeline(text, _REF)) == _codes(_pipeline(text, _REF))
