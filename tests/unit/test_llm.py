@@ -162,3 +162,61 @@ def test_prompt_rejects_wrong_input() -> None:
     with pytest.raises(_PromptError) as exc_info:
         _build_prompt("not-a-payload")  # type: ignore[arg-type]
     assert exc_info.value.code == "INVALID_INPUT"
+
+
+# ---------------------------------------------------------------------------
+# LLM-03: LLM client (DoD: timeout/error handling, key never browser-bound;
+# success returns explanation, failures return controlled status)
+# ---------------------------------------------------------------------------
+
+from app.core.config import LlmSettings as _LlmSettings  # noqa: E402
+from app.llm.client import LlmError as _LlmError  # noqa: E402
+from app.llm.client import explain as _explain  # noqa: E402
+from app.llm.prompt import build_prompt as _build_prompt2  # noqa: E402
+
+
+def _prompt():
+    return _build_prompt2(_assembled())
+
+
+def test_successful_call_returns_explanation() -> None:
+    result = _explain(_prompt(), transport=lambda text: "Name differs; see POL-RISK-001.")
+
+    assert result.status == "available"
+    assert result.explanation == "Name differs; see POL-RISK-001."
+    assert result.evidence_refs
+    assert all(r.chunk_id.startswith("POL-RISK-") for r in result.evidence_refs)
+
+
+def test_timeout_returns_controlled_failed_status() -> None:
+    def _timeout(_: str) -> str:
+        raise TimeoutError("timed out")
+
+    result = _explain(_prompt(), transport=_timeout)
+
+    assert result.status == "failed"
+    assert result.explanation is None
+    assert result.evidence_refs
+
+
+def test_missing_credential_returns_controlled_unavailable() -> None:
+    settings = _LlmSettings(api_key=None, api_url=None, model="demo", timeout_s=5)
+
+    result = _explain(_prompt(), settings=settings)
+
+    assert result.status == "unavailable"
+    assert result.explanation is None
+
+
+def test_api_key_never_leaks_into_results() -> None:
+    settings = _LlmSettings(api_key="sk-secret-123", api_url="https://x", model="demo", timeout_s=5)
+
+    with pytest.raises(_LlmError) as exc_info:
+        _explain(_prompt(), settings=settings, transport=lambda _: "echo sk-secret-123 here")
+    assert exc_info.value.code == "KEY_LEAK"
+
+
+def test_client_rejects_wrong_prompt() -> None:
+    with pytest.raises(_LlmError) as exc_info:
+        _explain("not-a-prompt")  # type: ignore[arg-type]
+    assert exc_info.value.code == "INVALID_PROMPT"
