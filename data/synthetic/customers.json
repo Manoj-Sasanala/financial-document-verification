@@ -1,0 +1,32 @@
+[
+  {
+    "customer_id": "CUST-0001",
+    "customer_name": "Aarav Mehta",
+    "address": "42 Example Avenue, Vijayawada",
+    "postal_code": "520001"
+  },
+  {
+    "customer_id": "CUST-0002",
+    "customer_name": "Maya Rao",
+    "address": "17 Sample Street, Guntur",
+    "postal_code": "522001"
+  },
+  {
+    "customer_id": "CUST-0003",
+    "customer_name": "Rohan Iyer",
+    "address": "88 Demo Road, Visakhapatnam",
+    "postal_code": "530001"
+  },
+  {
+    "customer_id": "CUST-0004",
+    "customer_name": "Nisha Kapoor",
+    "address": "25 Synthetic Park, Hyderabad",
+    "postal_code": "500001"
+  },
+  {
+    "customer_id": "CUST-0005",
+    "customer_name": "Vikram Sen",
+    "address": "63 Test Avenue, Bengaluru",
+    "postal_code": "560001"
+  }
+]
