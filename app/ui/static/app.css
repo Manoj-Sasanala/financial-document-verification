@@ -1,0 +1,50 @@
+/* UI-01: minimal reviewer page styling. */
+
+body {
+  margin: 0;
+  font-family: Arial, Helvetica, sans-serif;
+  background: #f4f5f7;
+  color: #111;
+}
+
+.page {
+  max-width: 720px;
+  margin: 32px auto;
+  padding: 24px;
+  background: #fff;
+  border: 1px solid #d7dbe0;
+  border-radius: 8px;
+}
+
+label {
+  display: block;
+  margin: 12px 0 4px;
+  font-weight: bold;
+}
+
+input, button {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px;
+  font-size: 14px;
+}
+
+button {
+  margin-top: 16px;
+  cursor: pointer;
+}
+
+.error {
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px solid #b00020;
+  background: #fdecea;
+}
+
+pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #f4f5f7;
+  padding: 12px;
+}
