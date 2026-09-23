@@ -104,3 +104,95 @@ def test_normalize_fields_rejects_wrong_input() -> None:
     with pytest.raises(NormalizationError) as exc_info:
         normalize_fields({"customer_name": "x"})  # type: ignore[arg-type]
     assert exc_info.value.code == "INVALID_INPUT_TYPE"
+
+
+# ---------------------------------------------------------------------------
+# VER-02: Field validators (DoD: required cases pass with explicit finding
+# codes; missing date and invalid date return expected findings)
+# ---------------------------------------------------------------------------
+
+from app.core.contracts import NormalizedFieldValue  # noqa: E402
+from app.verification.validate import (  # noqa: E402
+    ValidationError as _ValidationError,
+)
+from app.verification.validate import is_valid as _is_valid
+from app.verification.validate import validate_fields as _validate_fields
+
+
+def _nfields(**overrides) -> ExtractedFields:
+    from app.verification.normalize import normalize_fields as _nf
+
+    return _nf(_clean_fields(**overrides))
+
+
+def test_clean_normalized_fields_have_no_findings() -> None:
+    fields = _nfields()
+
+    assert _validate_fields(fields) == []
+    assert _is_valid(fields) is True
+
+
+def test_missing_required_address_returns_expected_finding() -> None:
+    fields = _nfields(address=FieldValue(raw_value=None, status="missing"))
+
+    findings = _validate_fields(fields)
+
+    codes = {(f.field_name, f.code, f.severity) for f in findings}
+    assert ("address", "MISSING_ADDRESS", "error") in codes
+    assert _is_valid(fields) is False
+
+
+def test_invalid_document_date_returns_expected_finding() -> None:
+    fields = _nfields(
+        document_date=FieldValue(raw_value="2026-02-30", status="present", source_page=1)
+    )
+    normalized = fields.model_copy(
+        update={
+            "document_date": NormalizedFieldValue(
+                raw_value="2026-02-30",
+                status="present",
+                source_page=1,
+                normalized_value="2026-02-30",
+            )
+        }
+    )
+
+    findings = _validate_fields(normalized)
+
+    assert [(x.field_name, x.code) for x in findings] == [
+        ("document_date", "INVALID_DOCUMENT_DATE")
+    ]
+    assert _is_valid(normalized) is False
+
+
+def test_uncertain_postal_code_returns_warning_finding() -> None:
+    fields = _nfields(
+        postal_code=FieldValue(raw_value=None, status="uncertain", source_page=1)
+    )
+
+    findings = _validate_fields(fields)
+
+    assert [(x.field_name, x.code, x.severity) for x in findings] == [
+        ("postal_code", "UNCERTAIN_POSTAL_CODE", "warning")
+    ]
+    assert _is_valid(fields) is True
+
+
+def test_unreadable_postal_code_is_invalid() -> None:
+    raw = _clean_fields(postal_code=FieldValue(raw_value="???", status="present"))
+    from app.verification.normalize import normalize_fields as _nf2
+
+    normalized = _nf2(raw)
+
+    findings = _validate_fields(normalized)
+
+    assert [(x.field_name, x.code) for x in findings] == [
+        ("postal_code", "INVALID_POSTAL_CODE")
+    ]
+    assert _is_valid(normalized) is False
+
+
+def test_validate_fields_rejects_wrong_input() -> None:
+    with pytest.raises(_ValidationError) as exc_info:
+        _validate_fields("not-fields")  # type: ignore[arg-type]
+    assert exc_info.value.code == "INVALID_INPUT_TYPE"
