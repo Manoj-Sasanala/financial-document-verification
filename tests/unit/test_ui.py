@@ -181,3 +181,46 @@ def test_mismatch_payloads_fit_renderer() -> None:
             assert {"field_name", "status", "observed_value", "reference_value"} <= set(
                 comparison.model_dump()
             )
+
+
+# ---------------------------------------------------------------------------
+# UI-04: ML/RAG/explanation display (DoD: AI visibly separated from
+# deterministic findings; renders even when explanation is unavailable)
+# ---------------------------------------------------------------------------
+
+
+def test_ai_section_is_badged_advisory() -> None:
+    html = _html()
+
+    assert 'badge advisory' in html
+    assert 'id="ai-ml"' in html
+    assert 'id="ai-model"' in html
+    assert 'id="ai-evidence"' in html
+    assert 'id="ai-explanation"' in html
+    assert 'id="ai-explanation-status"' in html
+
+
+def test_renderer_covers_ai_layers() -> None:
+    js = JS_PATH.read_text(encoding="utf-8")
+
+    assert "renderAi" in js
+    assert "ml_classification" in js
+    assert "policy_evidence" in js
+    assert "No explanation available." in js
+    assert "No policy evidence retrieved." in js
+
+
+def test_unavailable_explanation_still_fits_renderer() -> None:
+    from app.core.contracts import ExplanationResult, MLResult, RetrievalResult
+
+    ml = MLResult(classification="consistent", model_version="1.0.0")
+    assert ml.classification in {"consistent", "mismatch_detected", "insufficient_evidence"}
+
+    empty = RetrievalResult(status="no_evidence", evidence=[])
+    assert empty.evidence == []
+
+    missing = ExplanationResult(status="unavailable", explanation=None, evidence_refs=[])
+    dumped = missing.model_dump()
+    assert dumped["status"] == "unavailable"
+    assert dumped["explanation"] is None
+    assert set(dumped.keys()) == {"status", "explanation", "evidence_refs"}

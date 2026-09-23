@@ -89,3 +89,9 @@ li[data-severity="error"] {
 li[data-severity="warning"] {
   color: #7a5c00;
 }
+
+.badge.advisory {
+  background: #fff4e0;
+  border: 1px solid #7a5c00;
+  color: #5c4600;
+}

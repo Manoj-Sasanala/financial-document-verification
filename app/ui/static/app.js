@@ -99,12 +99,40 @@
     }
   }
 
+  function renderAi(payload) {
+    var ml = payload.ml_classification || {};
+    document.getElementById("ai-ml").textContent = ml.classification || "not available";
+    document.getElementById("ai-model").textContent = ml.model_version || "not available";
+
+    var evidenceList = document.getElementById("ai-evidence");
+    evidenceList.innerHTML = "";
+    var evidence = (payload.policy_evidence && payload.policy_evidence.evidence) || [];
+    evidence.forEach(function (item) {
+      var entry = document.createElement("li");
+      entry.setAttribute("data-chunk", item.chunk_id || "");
+      entry.textContent = (item.chunk_id || "?") + " — " + (item.source_id || "?");
+      evidenceList.appendChild(entry);
+    });
+    if (!evidence.length) {
+      var none = document.createElement("li");
+      none.textContent = "No policy evidence retrieved.";
+      evidenceList.appendChild(none);
+    }
+
+    var explanation = payload.explanation || {};
+    document.getElementById("ai-explanation-status").textContent =
+      "(" + (explanation.status || "unavailable") + ")";
+    document.getElementById("ai-explanation").textContent =
+      explanation.explanation || "No explanation available.";
+  }
+
   function showResult(payload) {
     document.getElementById("error").hidden = true;
     document.getElementById("result-status").textContent = payload.status || "unknown";
     renderFields(payload);
     renderComparisons(payload);
     renderIndicators(payload);
+    renderAi(payload);
     document.getElementById("result-body").textContent = JSON.stringify(payload, null, 2);
     document.getElementById("result").hidden = false;
   }
