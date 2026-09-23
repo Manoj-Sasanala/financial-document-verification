@@ -4,9 +4,13 @@ DoD: Metadata schema is implemented and validated.
 Test: Every policy chunk has stable metadata.
 """
 
+import json
 import re
+from pathlib import Path
 
 import pytest
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 from app.core.contracts import PolicyEvidence
 from app.rag.metadata import (
@@ -111,3 +115,60 @@ def test_missing_manifest_is_explicit() -> None:
     with pytest.raises(MetadataError) as exc_info:
         load_manifest("data/policy/does-not-exist.json")
     assert exc_info.value.code == "MANIFEST_NOT_FOUND"
+
+
+# ---------------------------------------------------------------------------
+# RAG-02: Chunk policy corpus (Definition of Done: corpus chunked
+# reproducibly and ready for embedding; chunks preserve source ID/version)
+# ---------------------------------------------------------------------------
+
+CHUNKS_PATH = PROJECT_ROOT / "artifacts" / "rag" / "chunks.jsonl"
+
+
+def test_chunk_manifest_exists_and_loads() -> None:
+    from app.rag.chunking import read_chunks_jsonl
+
+    assert CHUNKS_PATH.is_file(), f"Missing {CHUNKS_PATH}"
+    records = read_chunks_jsonl(CHUNKS_PATH)
+    assert len(records) == 35
+
+
+def test_chunks_preserve_source_id_and_version() -> None:
+    from app.rag.chunking import read_chunks_jsonl
+
+    manifest = load_manifest()
+    versions = {item.source_id: item.version for item in manifest.items}
+    for record in read_chunks_jsonl(CHUNKS_PATH):
+        assert record["source_id"] in versions
+        assert record["version"] == versions[record["source_id"]]
+        assert record["title"].strip()
+        assert record["text"].strip()
+
+
+def test_chunk_manifest_is_reproducible() -> None:
+    from app.rag.chunking import build_chunks, read_chunks_jsonl
+
+    rebuilt = build_chunks()
+    committed = read_chunks_jsonl(CHUNKS_PATH)
+    assert [json.dumps(r, sort_keys=True) for r in rebuilt] == [
+        json.dumps(r, sort_keys=True) for r in committed
+    ]
+
+
+def test_chunk_ids_are_unique_and_stable() -> None:
+    from app.rag.chunking import read_chunks_jsonl
+
+    records = read_chunks_jsonl(CHUNKS_PATH)
+    chunk_ids = [r["chunk_id"] for r in records]
+    assert len(set(chunk_ids)) == len(chunk_ids)
+    for record in records:
+        assert CHUNK_ID_PATTERN.match(record["chunk_id"])
+        assert record["chunk_id"] == chunk_id_for(record["source_id"], record["chunk_index"])
+
+
+def test_missing_chunk_manifest_is_explicit() -> None:
+    from app.rag.chunking import read_chunks_jsonl
+
+    with pytest.raises(MetadataError) as exc_info:
+        read_chunks_jsonl("artifacts/rag/does-not-exist.jsonl")
+    assert exc_info.value.code == "CHUNKS_NOT_FOUND"
