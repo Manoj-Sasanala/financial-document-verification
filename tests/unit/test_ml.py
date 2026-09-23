@@ -416,3 +416,65 @@ def test_empty_feature_text_is_explicit() -> None:
     with _pytest.raises(_InferenceError) as exc_info:
         _predict("   ")
     assert exc_info.value.code == "EMPTY_FEATURE_TEXT"
+
+
+# ---------------------------------------------------------------------------
+# ML-05: Model provenance (DoD: version metadata present end to end; every
+# stored ML result includes model version)
+# ---------------------------------------------------------------------------
+
+from app.ml.provenance import (  # noqa: E402
+    ProvenanceError as _ProvenanceError,
+)
+from app.ml.provenance import attach_provenance as _attach
+from app.ml.provenance import build_provenance as _build_prov
+from app.ml.provenance import verify_provenance as _verify_prov
+
+
+def test_provenance_carries_version_and_hashes() -> None:
+    provenance = _build_prov()
+
+    assert provenance["model_version"] == "1.0.0"
+    assert provenance["task_id"] == "ML-05"
+    assert set(provenance["artifact_hashes"]) == {"vectorizer.joblib", "classifier.joblib"}
+    assert all(len(h) == 64 for h in provenance["artifact_hashes"].values())
+
+
+def test_every_stored_result_includes_model_version() -> None:
+    result = _predict(_feature_text(*_ml_case("clean")))
+    record = _attach(result)
+
+    assert record["classification"] in {"consistent", "mismatch_detected", "insufficient_evidence"}
+    assert record["model_version"] == "1.0.0"
+    assert record["provenance"]["model_version"] == result.model_version
+
+
+def test_stored_record_verifies_against_disk() -> None:
+    record = _attach(_predict(_feature_text(*_ml_case("clean"))))
+
+    _verify_prov(record)
+
+
+def test_tampered_artifacts_are_detected(tmp_path) -> None:
+    import shutil as _shutil
+
+    mirror = tmp_path / "artifacts"
+    _shutil.copytree(PROJECT_ROOT / "artifacts" / "ml", mirror)
+    record = _attach(_predict(_feature_text(*_ml_case("clean"))))
+
+    target = mirror / "classifier.joblib"
+    raw = bytearray(target.read_bytes())
+    raw[10] = (raw[10] + 1) % 256
+    target.write_bytes(bytes(raw))
+
+    with _pytest.raises(_ProvenanceError) as exc_info:
+        _verify_prov(record, mirror)
+    assert exc_info.value.code == "PROVENANCE_MISMATCH"
+
+
+def test_version_mismatch_is_explicit() -> None:
+    result = _predict(_feature_text(*_ml_case("clean")))
+
+    with _pytest.raises(_ProvenanceError) as exc_info:
+        _attach(result, {"model_version": "9.9.9"})
+    assert exc_info.value.code == "VERSION_MISMATCH"
