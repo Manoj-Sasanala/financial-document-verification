@@ -258,3 +258,104 @@ def test_empty_id_is_explicit_failure(tmp_path: _Path) -> None:
     with pytest.raises(_ReferenceError) as exc_info:
         _lookup(db_path, "   ")
     assert exc_info.value.code == "EMPTY_CUSTOMER_ID"
+
+
+# ---------------------------------------------------------------------------
+# VER-04: Field-by-field comparison (DoD: deterministic output with observed
+# and reference values; clean and mismatch DATA-04 cases give expected
+# field outcomes)
+# ---------------------------------------------------------------------------
+
+from app.verification.compare import (  # noqa: E402
+    ComparisonError as _ComparisonError,
+)
+from app.verification.compare import compare_fields as _compare
+from app.verification.compare import mismatch_fields as _mismatches
+
+
+def _doc(text: str):
+    from app.document.field_parser import parse_fields as _parse
+    from app.verification.normalize import normalize_fields as _nf
+
+    return _nf(_parse(text).fields)
+
+
+_REF = {
+    "customer_id": "CUST-0001",
+    "customer_name": "Aarav Mehta",
+    "address": "42 Example Avenue, Vijayawada",
+    "postal_code": "520001",
+}
+
+
+def test_clean_case_matches_all_fields() -> None:
+    doc = _doc("Customer Name\nAarav Mehta\nAddress\n42 Example Avenue, Vijayawada\nPostal Code\n520001")
+
+    comparisons = _compare(doc, _REF)
+
+    assert [(c.field_name, c.status) for c in comparisons] == [
+        ("customer_name", "match"),
+        ("address", "match"),
+        ("postal_code", "match"),
+    ]
+    assert comparisons[0].observed_value == "aarav mehta"
+    assert comparisons[0].reference_value == "aarav mehta"
+    assert _mismatches(comparisons) == []
+
+
+def test_name_mismatch_case_flags_only_name() -> None:
+    doc = _doc("Customer Name\nAarav Sharma\nAddress\n42 Example Avenue, Vijayawada\nPostal Code\n520001")
+
+    comparisons = _compare(doc, _REF)
+
+    assert [(c.field_name, c.status) for c in comparisons] == [
+        ("customer_name", "mismatch"),
+        ("address", "match"),
+        ("postal_code", "match"),
+    ]
+    assert comparisons[0].observed_value == "aarav sharma"
+    assert comparisons[0].reference_value == "aarav mehta"
+    assert _mismatches(comparisons) == ["customer_name"]
+
+
+def test_address_mismatch_case_flags_only_address() -> None:
+    doc = _doc("Customer Name\nAarav Mehta\nAddress\n99 Synthetic Street, Vijayawada\nPostal Code\n520001")
+
+    assert [(c.field_name, c.status) for c in _compare(doc, _REF)] == [
+        ("customer_name", "match"),
+        ("address", "mismatch"),
+        ("postal_code", "match"),
+    ]
+
+
+def test_missing_address_compares_as_missing() -> None:
+    doc = _doc("Customer Name\nAarav Mehta\nAddress\n\nPostal Code\n520001")
+
+    comparisons = _compare(doc, _REF)
+
+    assert comparisons[1].status == "missing"
+    assert comparisons[1].reference_value == "42 example avenue, vijayawada"
+
+
+def test_unknown_customer_is_unavailable() -> None:
+    doc = _doc("Customer Name\nSynthetic Unknown Customer")
+
+    comparisons = _compare(doc, None)
+
+    assert {c.status for c in comparisons} == {"unavailable"}
+    assert all(c.reference_value is None for c in comparisons)
+
+
+def test_comparison_is_deterministic() -> None:
+    doc = _doc("Customer Name\nAarav Mehta\nPostal Code\n520001")
+
+    first = [(c.field_name, c.status, c.observed_value, c.reference_value) for c in _compare(doc, _REF)]
+    second = [(c.field_name, c.status, c.observed_value, c.reference_value) for c in _compare(doc, _REF)]
+
+    assert first == second
+
+
+def test_compare_rejects_wrong_input() -> None:
+    with pytest.raises(_ComparisonError) as exc_info:
+        _compare("not-fields", _REF)  # type: ignore[arg-type]
+    assert exc_info.value.code == "INVALID_INPUT_TYPE"
