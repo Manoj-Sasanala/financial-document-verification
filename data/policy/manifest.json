@@ -1,0 +1,52 @@
+{
+    "corpus_id": "kyc-demo-policy-corpus",
+    "corpus_version": "1.0.0",
+    "status": "controlled-demo",
+    "description": "Controlled synthetic/demo policy and rule corpus for the AI KYC Document Verification & Risk Copilot MVP.",
+    "authority": "Project-approved demo policy/rule content",
+    "external_sources_allowed": false,
+    "items": [
+        {
+            "source_id": "POL-RISK-001",
+            "version": "1.0.0",
+            "title": "Name mismatch rule",
+            "path": "data/policy/sources/POL-RISK-001-name-mismatch.md",
+            "risk_indicator": "name_mismatch"
+        },
+        {
+            "source_id": "POL-RISK-002",
+            "version": "1.0.0",
+            "title": "Address mismatch rule",
+            "path": "data/policy/sources/POL-RISK-002-address-mismatch.md",
+            "risk_indicator": "address_mismatch"
+        },
+        {
+            "source_id": "POL-RISK-003",
+            "version": "1.0.0",
+            "title": "Missing required field rule",
+            "path": "data/policy/sources/POL-RISK-003-missing-required-field.md",
+            "risk_indicator": "missing_required_field"
+        },
+        {
+            "source_id": "POL-RISK-004",
+            "version": "1.0.0",
+            "title": "Invalid document date rule",
+            "path": "data/policy/sources/POL-RISK-004-invalid-document-date.md",
+            "risk_indicator": "invalid_document_date"
+        },
+        {
+            "source_id": "POL-RISK-005",
+            "version": "1.0.0",
+            "title": "Reference customer not found rule",
+            "path": "data/policy/sources/POL-RISK-005-reference-customer-not-found.md",
+            "risk_indicator": "reference_customer_not_found"
+        },
+        {
+            "source_id": "POL-RISK-006",
+            "version": "1.0.0",
+            "title": "Unsupported document type rule",
+            "path": "data/policy/sources/POL-RISK-006-unsupported-document-type.md",
+            "risk_indicator": "unsupported_document_type"
+        }
+    ]
+}
