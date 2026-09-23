@@ -930,3 +930,79 @@ def test_repository_get_missing_case_is_explicit(tmp_path: Path):
     with pytest.raises(RepositoryError) as exc_info:
         get_case(db_path, "CASE-NOPE")
     assert exc_info.value.code == "CASE_NOT_FOUND"
+
+
+# ---------------------------------------------------------------------------
+# DB-07: Provenance/version persistence (DoD: provenance visible in retrieved
+# case data; complete case exposes provenance for each stage)
+# ---------------------------------------------------------------------------
+
+from app.db.provenance import (  # noqa: E402
+    load_provenance,
+    save_provenance,
+)
+
+
+def _prov_record():
+    from datetime import datetime, timezone
+
+    from app.core.contracts import Provenance
+
+    return Provenance(
+        processed_at=datetime.now(timezone.utc),
+        rule_versions=["risk-rules/1.0.0", "boundary/1.0.0"],
+        model_version="1.0.0",
+        policy_source_versions=["1.0.0"],
+        extraction_source_refs=["page-1#customer-name", "pdf#page=1"],
+    )
+
+
+def test_provenance_round_trip(tmp_path: Path):
+    db_path = tmp_path / "test.db"
+
+    initialize_database(db_path)
+    _repo_case(db_path, case_id="CASE-PROV-001")
+
+    save_provenance(db_path, "CASE-PROV-001", _prov_record())
+    loaded = load_provenance(db_path, "CASE-PROV-001")
+
+    assert loaded["model_version"] == "1.0.0"
+    assert loaded["rule_versions"] == ["risk-rules/1.0.0", "boundary/1.0.0"]
+    assert loaded["policy_source_versions"] == ["1.0.0"]
+    assert loaded["extraction_source_refs"] == ["page-1#customer-name", "pdf#page=1"]
+    assert loaded["processed_at"]
+
+
+def test_complete_case_exposes_stage_provenance(tmp_path: Path):
+    from app.db.repository import save_ai_result as _save_ai
+
+    db_path = tmp_path / "test.db"
+
+    initialize_database(db_path)
+    _repo_case(db_path, case_id="CASE-PROV-002")
+    save_provenance(db_path, "CASE-PROV-002", _prov_record())
+    _save_ai(
+        db_path, "CASE-PROV-002",
+        ml_classification="consistent", model_version="1.0.0",
+        retrieval_status="no_evidence", evidence_refs=[],
+        explanation_status="unavailable", explanation_text=None,
+    )
+
+    case = get_case(db_path, "CASE-PROV-002")
+
+    assert case["provenance"] is not None
+    assert case["provenance"]["model_version"] == "1.0.0"
+    assert case["ai_result"]["model_version"] == case["provenance"]["model_version"]
+
+
+def test_missing_provenance_is_explicit_and_optional(tmp_path: Path):
+    db_path = tmp_path / "test.db"
+
+    initialize_database(db_path)
+    _repo_case(db_path, case_id="CASE-PROV-003")
+
+    with pytest.raises(RepositoryError) as exc_info:
+        load_provenance(db_path, "CASE-PROV-003")
+    assert exc_info.value.code == "PROVENANCE_NOT_FOUND"
+
+    assert get_case(db_path, "CASE-PROV-003")["provenance"] is None

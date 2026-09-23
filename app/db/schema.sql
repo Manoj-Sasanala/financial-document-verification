@@ -81,6 +81,16 @@ CREATE TABLE IF NOT EXISTS findings (
 CREATE INDEX IF NOT EXISTS idx_findings_case_id
     ON findings(case_id);
 
+CREATE TABLE IF NOT EXISTS provenance (
+    case_id TEXT PRIMARY KEY,
+    processed_at TEXT NOT NULL,
+    rule_versions_json TEXT NOT NULL DEFAULT '[]',
+    model_version TEXT,
+    policy_source_versions_json TEXT NOT NULL DEFAULT '[]',
+    extraction_source_refs_json TEXT NOT NULL DEFAULT '[]',
+    FOREIGN KEY (case_id) REFERENCES cases(case_id)
+);
+
 CREATE TABLE IF NOT EXISTS ai_results (
     case_id TEXT PRIMARY KEY,
     ml_classification TEXT NOT NULL CHECK (
