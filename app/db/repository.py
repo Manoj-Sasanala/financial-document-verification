@@ -108,8 +108,40 @@ def load_extracted_fields(db_path: str | Path, case_id: str) -> dict[str, dict[s
     return {row["field_name"]: dict(row) for row in rows}
 
 
+CUSTOMER_COLUMNS = ("customer_id", "customer_name", "address", "postal_code")
+
+
+def get_customer_by_id(
+    db_path: str | Path, customer_id: str
+) -> dict[str, Any] | None:
+    """Return the customer row for an ID, or None when not found.
+
+    Controlled ``None`` (not an exception) is the not_found signal consumed
+    by VER-03 reference lookup.
+    """
+    if not isinstance(customer_id, str) or not customer_id.strip():
+        raise RepositoryError("EMPTY_CUSTOMER_ID", "customer_id must be non-empty.")
+    with sqlite3.connect(db_path) as connection:
+        connection.row_factory = sqlite3.Row
+        try:
+            row = connection.execute(
+                """
+                SELECT customer_id, customer_name, address, postal_code
+                FROM customers
+                WHERE customer_id = ?
+                """,
+                (customer_id.strip(),),
+            ).fetchone()
+        except sqlite3.OperationalError as exc:
+            raise RepositoryError(
+                "CUSTOMERS_UNAVAILABLE", f"customers table unavailable: {exc}"
+            ) from exc
+    return dict(row) if row is not None else None
+
+
 __all__ = [
     "RepositoryError",
+    "get_customer_by_id",
     "load_extracted_fields",
     "save_extracted_fields",
 ]

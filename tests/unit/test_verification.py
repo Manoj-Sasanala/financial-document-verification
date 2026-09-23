@@ -196,3 +196,65 @@ def test_validate_fields_rejects_wrong_input() -> None:
     with pytest.raises(_ValidationError) as exc_info:
         _validate_fields("not-fields")  # type: ignore[arg-type]
     assert exc_info.value.code == "INVALID_INPUT_TYPE"
+
+
+# ---------------------------------------------------------------------------
+# VER-03: Customer reference lookup (DoD: positive and negative tests;
+# known ID returns the record, unknown ID returns controlled not_found)
+# ---------------------------------------------------------------------------
+
+from pathlib import Path as _Path  # noqa: E402
+
+from app.db.init_db import initialize_database as _init_db  # noqa: E402
+from app.db.repository import get_customer_by_id as _get_customer  # noqa: E402
+from app.verification.reference import (  # noqa: E402
+    ReferenceError as _ReferenceError,
+)
+from app.verification.reference import lookup_reference as _lookup
+from scripts.seed_db import seed_customers as _seed  # noqa: E402
+
+
+def _seeded_db(tmp_path: _Path) -> _Path:
+    db_path = tmp_path / "ref.db"
+    _init_db(db_path)
+    assert _seed(db_path) == 5
+    return db_path
+
+
+def test_known_id_returns_correct_record(tmp_path: _Path) -> None:
+    db_path = _seeded_db(tmp_path)
+
+    result = _lookup(db_path, "CUST-0001")
+
+    assert result.found is True
+    assert result.code == "found"
+    assert result.customer == {
+        "customer_id": "CUST-0001",
+        "customer_name": "Aarav Mehta",
+        "address": "42 Example Avenue, Vijayawada",
+        "postal_code": "520001",
+    }
+
+
+def test_unknown_id_returns_controlled_not_found(tmp_path: _Path) -> None:
+    db_path = _seeded_db(tmp_path)
+
+    result = _lookup(db_path, "CUST-9999")
+
+    assert result.found is False
+    assert result.code == "not_found"
+    assert result.customer is None
+
+
+def test_repository_returns_none_for_unknown_id(tmp_path: _Path) -> None:
+    db_path = _seeded_db(tmp_path)
+
+    assert _get_customer(db_path, "CUST-9999") is None
+
+
+def test_empty_id_is_explicit_failure(tmp_path: _Path) -> None:
+    db_path = _seeded_db(tmp_path)
+
+    with pytest.raises(_ReferenceError) as exc_info:
+        _lookup(db_path, "   ")
+    assert exc_info.value.code == "EMPTY_CUSTOMER_ID"
