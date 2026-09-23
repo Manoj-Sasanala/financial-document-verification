@@ -336,3 +336,83 @@ def test_synthetic_limitation_is_documented() -> None:
     assert "ML-03" in doc
     assert "data/ml/test.jsonl" in doc
     assert "must not be interpreted as production" in doc
+
+
+# ---------------------------------------------------------------------------
+# ML-04: Runtime inference (DoD: loads saved artifacts without retraining;
+# prepared samples return valid configured labels)
+# ---------------------------------------------------------------------------
+
+from app.core.contracts import MLResult as _MLResult  # noqa: E402
+from app.ml.inference import (  # noqa: E402
+    InferenceError as _InferenceError,
+)
+from app.ml.inference import load_artifacts as _load
+from app.ml.inference import predict_case as _predict_case
+from app.ml.inference import predict_label as _predict
+
+
+def _valid_labels() -> set:
+    return {"consistent", "mismatch_detected", "insufficient_evidence"}
+
+
+def test_inference_loads_artifacts_without_retraining() -> None:
+    model = _load()
+
+    assert model.model_version == "1.0.0"
+    assert hasattr(model.vectorizer, "transform")
+    assert hasattr(model.classifier, "predict")
+
+
+def test_prepared_cases_return_valid_labels() -> None:
+    clean_text = _feature_text(*_ml_case("clean"))
+    mismatch_text = _feature_text(*_ml_case("name"))
+
+    clean = _predict(clean_text)
+    mismatch = _predict(mismatch_text)
+
+    assert isinstance(clean, _MLResult)
+    assert clean.classification in _valid_labels()
+    assert mismatch.classification in _valid_labels()
+    assert clean.model_version == "1.0.0"
+
+
+def test_predict_case_end_to_end() -> None:
+    from app.document.field_parser import parse_fields as _parse
+    from app.verification.compare import compare_fields as _cmp
+    from app.verification.normalize import normalize_fields as _nf
+    from app.verification.risk_rules import assess_risk as _ar
+    from app.verification.validate import validate_fields as _vf
+
+    ref = {
+        "customer_id": "CUST-0001",
+        "customer_name": "Aarav Mehta",
+        "address": "42 Example Avenue, Vijayawada",
+        "postal_code": "520001",
+    }
+    normalized = _nf(_parse("Customer Name\nAarav Mehta\nAddress\n42 Example Avenue, Vijayawada\nPostal Code\n520001").fields)
+    findings = _vf(normalized)
+    comparisons = _cmp(normalized, ref)
+    indicators = _ar(findings, comparisons)
+
+    result = _predict_case(comparisons, indicators, findings)
+
+    assert result.classification in _valid_labels()
+
+
+def test_inference_is_deterministic() -> None:
+    text = _feature_text(*_ml_case("clean"))
+
+    assert _predict(text).classification == _predict(text).classification
+
+
+def test_missing_artifacts_is_explicit(tmp_path) -> None:
+    with _pytest.raises(_InferenceError) as exc_info:
+        _load(tmp_path / "nope")
+    assert exc_info.value.code == "ARTIFACTS_MISSING"
+
+
+def test_empty_feature_text_is_explicit() -> None:
+    with _pytest.raises(_InferenceError) as exc_info:
+        _predict("   ")
+    assert exc_info.value.code == "EMPTY_FEATURE_TEXT"
