@@ -1,0 +1,8 @@
+{
+  "task_id": "QA-06",
+  "report": "persistence across restart",
+  "test_file": "tests/integration/test_persistence.py",
+  "tests": 3,
+  "passed": 3,
+  "storage": "CASE_DB_PATH file database; default ./db.sqlite3"
+}
