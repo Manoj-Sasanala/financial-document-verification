@@ -151,3 +151,68 @@ def test_datasets_are_synthetic_only() -> None:
         raw = path.read_text(encoding="utf-8")
         for token in forbidden:
             assert token not in raw
+
+
+# ---------------------------------------------------------------------------
+# ML-01: Feature text (DoD: schema documented and implemented; same case
+# produces identical feature text)
+# ---------------------------------------------------------------------------
+
+import pytest as _pytest  # noqa: E402
+
+from app.ml.features import (  # noqa: E402
+    FEATURE_SCHEMA_VERSION as _SCHEMA,
+)
+from app.ml.features import FeatureError as _FeatureError
+from app.ml.features import build_feature_text as _feature_text
+
+
+def _ml_case(kind: str = "clean"):
+    from app.document.field_parser import parse_fields as _parse
+    from app.verification.compare import compare_fields as _compare
+    from app.verification.normalize import normalize_fields as _nf
+    from app.verification.risk_rules import assess_risk as _assess
+    from app.verification.validate import validate_fields as _validate
+
+    texts = {
+        "clean": "Customer Name\nAarav Mehta\nAddress\n42 Example Avenue, Vijayawada\nPostal Code\n520001",
+        "name": "Customer Name\nAarav Sharma\nAddress\n42 Example Avenue, Vijayawada\nPostal Code\n520001",
+    }
+    ref = {
+        "customer_id": "CUST-0001",
+        "customer_name": "Aarav Mehta",
+        "address": "42 Example Avenue, Vijayawada",
+        "postal_code": "520001",
+    }
+    normalized = _nf(_parse(texts[kind]).fields)
+    findings = _validate(normalized)
+    comparisons = _compare(normalized, ref)
+    indicators = _assess(findings, comparisons)
+    return comparisons, indicators, findings
+
+
+def test_same_case_produces_identical_feature_text() -> None:
+    case = _ml_case("clean")
+
+    assert _feature_text(*case) == _feature_text(*case)
+
+
+def test_feature_text_follows_documented_schema() -> None:
+    comparisons, indicators, findings = _ml_case("clean")
+    text = _feature_text(comparisons, indicators, findings)
+    lines = text.strip().splitlines()
+
+    assert lines[0] == f"schema {_SCHEMA}"
+    assert lines[1].startswith("field customer_name match")
+    assert "aarav mehta => aarav mehta" in lines[1]
+
+
+def test_mismatch_case_changes_feature_text() -> None:
+    assert _feature_text(*_ml_case("clean")) != _feature_text(*_ml_case("name"))
+    assert "indicator name_mismatch RISK-001 warning" in _feature_text(*_ml_case("name"))
+
+
+def test_empty_comparisons_is_explicit() -> None:
+    with _pytest.raises(_FeatureError) as exc_info:
+        _feature_text([], [])
+    assert exc_info.value.code == "EMPTY_COMPARISONS"
