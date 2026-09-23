@@ -216,3 +216,73 @@ def test_empty_comparisons_is_explicit() -> None:
     with _pytest.raises(_FeatureError) as exc_info:
         _feature_text([], [])
     assert exc_info.value.code == "EMPTY_COMPARISONS"
+
+
+# ---------------------------------------------------------------------------
+# ML-02: Train TF-IDF + Logistic Regression (DoD: saved artifacts exist with
+# a recorded model version; training completes and artifacts load)
+# ---------------------------------------------------------------------------
+
+import joblib as _joblib  # noqa: E402
+
+from app.ml.train import (  # noqa: E402
+    ARTIFACTS_DIR as _ARTIFACTS,
+)
+from app.ml.train import example_to_features as _ex_features
+from app.ml.train import load_customers as _load_customers
+from app.ml.train import load_labeled_examples as _load_examples
+from app.ml.train import save_artifacts as _save_artifacts
+from app.ml.train import train as _train
+
+
+def test_training_completes_with_versioned_metadata(tmp_path) -> None:
+    bundle = _train()
+
+    assert bundle["model_version"] == "1.0.0"
+    assert len(bundle["texts"]) == 9
+    assert set(bundle["labels"]) == {
+        "consistent",
+        "mismatch_detected",
+        "insufficient_evidence",
+    }
+
+    out = _save_artifacts(bundle, tmp_path / "artifacts")
+
+    assert (out / "vectorizer.joblib").is_file()
+    assert (out / "classifier.joblib").is_file()
+    metadata = json.loads((out / "model_metadata.json").read_text(encoding="utf-8"))
+    assert metadata["model_version"] == "1.0.0"
+    assert metadata["num_train_examples"] == 9
+
+
+def test_saved_artifacts_load_and_predict(tmp_path) -> None:
+    bundle = _train()
+    out = _save_artifacts(bundle, tmp_path / "artifacts")
+
+    vectorizer = _joblib.load(out / "vectorizer.joblib")
+    classifier = _joblib.load(out / "classifier.joblib")
+
+    predicted = classifier.predict(vectorizer.transform(bundle["texts"]))
+
+    assert set(predicted) <= set(bundle["labels"])
+    assert len(predicted) == len(bundle["texts"])
+
+
+def test_labeled_examples_bridge_to_feature_text() -> None:
+    examples = _load_examples()
+    customers = _load_customers()
+
+    texts_labels = [_ex_features(e, customers) for e in examples]
+
+    assert len(texts_labels) == 9
+    for text, label in texts_labels:
+        assert text.startswith("schema 1.0.0")
+        assert label in {"consistent", "mismatch_detected", "insufficient_evidence"}
+
+
+def test_committed_artifacts_exist_with_version(tmp_path) -> None:
+    _ = tmp_path
+    assert (_ARTIFACTS / "vectorizer.joblib").is_file()
+    assert (_ARTIFACTS / "classifier.joblib").is_file()
+    metadata = json.loads((_ARTIFACTS / "model_metadata.json").read_text(encoding="utf-8"))
+    assert metadata["model_version"] == "1.0.0"
