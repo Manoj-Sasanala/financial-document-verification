@@ -172,3 +172,131 @@ def test_custom_limits_are_supported():
 
     assert result.size_bytes == len(PDF_BYTES)
     assert result.page_count == 3
+
+
+# ---------------------------------------------------------------------------
+# DOC-03: OCR fallback (DoD: OCR path works on at least one prepared image
+# case; scanned input yields usable text or a controlled failure state)
+# ---------------------------------------------------------------------------
+
+from io import BytesIO  # noqa: E402
+
+import pytest as _pytest  # noqa: E402,F401
+
+from app.document.ocr import (  # noqa: E402
+    OcrError,
+    detect_image_kind,
+    ocr_required_for,
+    run_ocr,
+)
+
+
+def _make_scanned_png(lines=("PROOF OF ADDRESS", "Aarav Mehta", "520001")) -> bytes:
+    from PIL import Image, ImageDraw
+
+    image = Image.new("RGB", (480, 200), color="white")
+    draw = ImageDraw.Draw(image)
+    y = 20
+    for line in lines:
+        draw.text((20, y), line, fill="black")
+        y += 30
+    buffer = BytesIO()
+    image.save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def _stub_engine(expected: bytes, text: str):
+    def _engine(payload: bytes) -> str | None:
+        assert payload == expected
+        return text
+
+    _engine.__name__ = "stub_engine"
+    return _engine
+
+
+def test_ocr_detects_supported_image_kinds():
+    image = _make_scanned_png()
+
+    assert detect_image_kind(image) == "png"
+    assert detect_image_kind(b"\xff\xd8\xff\x00jpeg") == "jpeg"
+    assert detect_image_kind(b"%PDF-1.4") is None
+
+
+def test_ocr_with_stub_engine_returns_text_on_prepared_image():
+    image = _make_scanned_png()
+
+    result = run_ocr(
+        image,
+        engine=_stub_engine(image, "PROOF OF ADDRESS\nAarav Mehta\n520001"),
+        filename="scan.png",
+    )
+
+    assert "Aarav Mehta" in result.text
+    assert "520001" in result.text
+    assert result.engine == "stub_engine"
+    assert result.char_count == len(result.text)
+    assert result.provenance["extraction_method"] == "ocr"
+    assert result.provenance["source_filename"] == "scan.png"
+
+
+def test_ocr_without_engine_is_controlled_failure_with_provenance():
+    image = _make_scanned_png()
+
+    with _pytest.raises(OcrError) as exc_info:
+        run_ocr(image, filename="scan.png")
+
+    assert exc_info.value.code == "ENGINE_UNAVAILABLE"
+    assert exc_info.value.provenance["extraction_method"] == "ocr"
+    assert exc_info.value.provenance["source_filename"] == "scan.png"
+
+
+def test_ocr_rejects_empty_and_unsupported_inputs():
+    with _pytest.raises(OcrError) as exc_info:
+        run_ocr(b"")
+    assert exc_info.value.code == "EMPTY_INPUT"
+
+    with _pytest.raises(OcrError) as exc_info:
+        run_ocr(b"%PDF-1.4 native text, not an image")
+    assert exc_info.value.code == "UNSUPPORTED_INPUT"
+
+
+def test_ocr_engine_empty_result_is_controlled_failure():
+    image = _make_scanned_png()
+
+    with _pytest.raises(OcrError) as exc_info:
+        run_ocr(image, engine=_stub_engine(image, "   "))
+    assert exc_info.value.code == "NO_TEXT_FOUND"
+
+
+def test_ocr_routing_matches_native_text_sufficiency():
+    assert ocr_required_for("") is True
+    assert ocr_required_for("hi") is True
+    assert ocr_required_for("PROOF OF ADDRESS synthetic proof document text here") is False
+
+
+def test_image_only_pdf_routes_to_ocr_fallback():
+    from app.document.pdf_extract import extract_pdf_text
+
+    blank_pdf = _make_blank_pdf_bytes()
+    native = extract_pdf_text(blank_pdf)
+
+    assert native.text == ""
+    assert native.requires_ocr is True
+    assert ocr_required_for(native.text) is True
+
+    scanned = _make_scanned_png()
+    with _pytest.raises(OcrError) as exc_info:
+        run_ocr(scanned)
+    assert exc_info.value.code == "ENGINE_UNAVAILABLE"
+
+
+def _make_blank_pdf_bytes() -> bytes:
+    from io import BytesIO as _BytesIO
+
+    from pypdf import PdfWriter
+
+    writer = PdfWriter()
+    writer.add_blank_page(width=200, height=200)
+    buffer = _BytesIO()
+    writer.write(buffer)
+    return buffer.getvalue()
