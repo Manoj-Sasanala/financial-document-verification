@@ -126,3 +126,59 @@ def test_pipeline_records_stage_errors_without_crashing(tmp_path: Path) -> None:
 
     assert result.ml_classification is None
     assert any(e.stage == "ml" and e.recoverable for e in result.errors)
+
+
+# ---------------------------------------------------------------------------
+# QA-02: Clean end-to-end scenario (DoD: clean case completes and can be
+# retrieved; no manual code changes during the flow)
+# ---------------------------------------------------------------------------
+
+
+def test_clean_case_completes_through_upload_decision_storage(tmp_path: Path) -> None:
+    import os
+
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    db_path = tmp_path / "qa02.db"
+    initialize_database(db_path)
+    seed_customers(db_path)
+    os.environ["CASE_DB_PATH"] = str(db_path)
+    client = TestClient(app)
+
+    pdf = (
+        Path(__file__).resolve().parents[2]
+        / "data"
+        / "synthetic"
+        / "documents"
+        / "template.pdf"
+    ).read_bytes()
+
+    created = client.post(
+        "/api/v1/cases",
+        data={"customer_id": "CUST-0001"},
+        files={"file": ("proof.pdf", pdf, "application/pdf")},
+    )
+    assert created.status_code == 201
+    body = created.json()
+    case_id = body["case_id"]
+    assert body["status"] in {"completed", "completed_with_warnings"}
+    assert body["fields"]["customer_name"]["raw_value"] == "Aarav Mehta"
+    assert body["risk_indicators"] == []
+    assert body["ml_classification"] is not None
+    assert body["policy_evidence"] is not None
+    assert body["explanation"] is not None
+
+    review = client.post(
+        f"/api/v1/cases/{case_id}/review",
+        json={"decision": "approve", "comment": "Clean case."},
+    )
+    assert review.status_code == 200
+
+    retrieved = client.get(f"/api/v1/cases/{case_id}")
+    assert retrieved.status_code == 200
+    stored = retrieved.json()
+    assert stored["review"]["decision"] == "approve"
+    assert stored["fields"]["customer_name"]["raw_value"] == "Aarav Mehta"
+    assert stored["risk_indicators"] == []

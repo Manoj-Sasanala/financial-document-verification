@@ -1,0 +1,11 @@
+{
+  "task_id": "QA-02",
+  "report": "clean end-to-end scenario",
+  "test_file": "tests/integration/test_pipeline.py::test_clean_case_completes_through_upload_decision_storage",
+  "flow": ["upload", "decision", "storage", "retrieval"],
+  "outcome": {
+    "status": ["completed", "completed_with_warnings"],
+    "risk_indicators": [],
+    "review_decision": "approve"
+  }
+}
