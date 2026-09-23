@@ -2,19 +2,56 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Synthetic Unreadable Document</title>
+  <title>Synthetic Unreadable Proof of Address</title>
   <meta name="document-template-version" content="1.0.0">
+  <meta name="synthetic-reference-customer" content="Aarav Mehta">
 </head>
+
 <body>
-  <main id="unreadable-document">
+  <main
+    id="unreadable-document"
+    data-template-version="1.0.0"
+    data-extraction-status="unreadable"
+  >
+
     <h1>PROOF OF ADDRESS</h1>
 
-    <p>████ ████ █████ ████</p>
-    <p>▓▓▓▓ ░░░░ ▓▓▓▓ ░░░░</p>
-    <p>??? ??? ??? ???</p>
-    <p>### ### ### ###</p>
+    <section aria-label="Customer details">
 
-    <p>This synthetic document intentionally contains unreadable/OCR-hostile content.</p>
+      <div class="field" data-field="customer_id">
+        <div class="label">Customer ID</div>
+        <div class="value">████ ████ █████</div>
+      </div>
+
+      <div class="field" data-field="customer_name">
+        <div class="label">Customer Name</div>
+        <div class="value">Aarav █████</div>
+      </div>
+
+      <div class="field" data-field="address">
+        <div class="label">Address</div>
+        <div class="value">▓▓▓▓ ░░░░ ████ ???</div>
+      </div>
+
+      <div class="field" data-field="postal_code">
+        <div class="label">Postal Code</div>
+        <div class="value">??? ???</div>
+      </div>
+
+    </section>
+
+    <section aria-label="Unreadable content">
+      <p>████ ████ █████ ████</p>
+      <p>▓▓▓▓ ░░░░ ▓▓▓▓ ░░░░</p>
+      <p>??? ??? ??? ???</p>
+      <p>### ### ### ###</p>
+    </section>
+
+    <p>
+      This synthetic document intentionally contains
+      unreadable/OCR-hostile content.
+    </p>
+
   </main>
 </body>
 </html>
