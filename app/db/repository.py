@@ -349,8 +349,114 @@ def load_ai_result(db_path: str | Path, case_id: str) -> dict[str, Any]:
     return record
 
 
+CASE_STATUSES = ("processing", "completed", "completed_with_warnings", "failed")
+REVIEW_DECISIONS = ("approve", "reject", "request_information")
+
+
+def _now_iso() -> str:
+    from datetime import datetime, timezone
+
+    return datetime.now(timezone.utc).isoformat()
+
+
+def create_case(
+    db_path: str | Path,
+    case_id: str,
+    customer_id: str,
+    original_filename: str,
+    content_type: str,
+    *,
+    status: str = "processing",
+) -> str:
+    """Create a case row; customer must already exist."""
+    if not case_id or not str(case_id).strip():
+        raise RepositoryError("EMPTY_CASE_ID", "case_id must be a non-empty string.")
+    if status not in CASE_STATUSES:
+        raise RepositoryError("INVALID_STATUS", f"Invalid case status: {status!r}.")
+    if get_customer_by_id(db_path, customer_id) is None:
+        raise RepositoryError("CUSTOMER_NOT_FOUND", f"Unknown customer: {customer_id}.")
+    stamp = _now_iso()
+    try:
+        with sqlite3.connect(db_path) as connection:
+            connection.execute(
+                """
+                INSERT INTO cases (
+                    case_id, customer_id, original_filename, content_type,
+                    status, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (case_id, customer_id, original_filename, content_type, status, stamp, stamp),
+            )
+    except sqlite3.IntegrityError as exc:
+        raise RepositoryError("CASE_EXISTS", f"Case write rejected: {exc}") from exc
+    return case_id
+
+
+def update_case_status(db_path: str | Path, case_id: str, status: str) -> None:
+    """Move a case to a new lifecycle status."""
+    if status not in CASE_STATUSES:
+        raise RepositoryError("INVALID_STATUS", f"Invalid case status: {status!r}.")
+    with sqlite3.connect(db_path) as connection:
+        cursor = connection.execute(
+            "UPDATE cases SET status = ?, updated_at = ? WHERE case_id = ?",
+            (status, _now_iso(), case_id),
+        )
+    if cursor.rowcount == 0:
+        raise RepositoryError("CASE_NOT_FOUND", f"Unknown case: {case_id}.")
+
+
+def save_review(
+    db_path: str | Path,
+    case_id: str,
+    decision: str,
+    comment: str | None = None,
+) -> None:
+    """Record the human reviewer decision for a case."""
+    if decision not in REVIEW_DECISIONS:
+        raise RepositoryError("INVALID_DECISION", f"Invalid review decision: {decision!r}.")
+    with sqlite3.connect(db_path) as connection:
+        cursor = connection.execute(
+            """
+            UPDATE cases
+            SET review_decision = ?, review_comment = ?, reviewed_at = ?
+            WHERE case_id = ?
+            """,
+            (decision, comment, _now_iso(), case_id),
+        )
+    if cursor.rowcount == 0:
+        raise RepositoryError("CASE_NOT_FOUND", f"Unknown case: {case_id}.")
+
+
+def get_case(db_path: str | Path, case_id: str) -> dict[str, Any]:
+    """Reconstruct a complete case: row, fields, findings and AI result."""
+    with sqlite3.connect(db_path) as connection:
+        connection.row_factory = sqlite3.Row
+        row = connection.execute(
+            "SELECT * FROM cases WHERE case_id = ?", (case_id,)
+        ).fetchone()
+    if row is None:
+        raise RepositoryError("CASE_NOT_FOUND", f"Unknown case: {case_id}.")
+    case = dict(row)
+    try:
+        case["extracted_fields"] = load_extracted_fields(db_path, case_id)
+    except RepositoryError:
+        case["extracted_fields"] = {}
+    try:
+        case["findings"] = load_findings(db_path, case_id)
+    except RepositoryError:
+        case["findings"] = []
+    try:
+        case["ai_result"] = load_ai_result(db_path, case_id)
+    except RepositoryError:
+        case["ai_result"] = None
+    return case
+
+
 __all__ = [
     "RepositoryError",
+    "create_case",
+    "get_case",
     "get_customer_by_id",
     "load_ai_result",
     "load_extracted_fields",
@@ -358,6 +464,10 @@ __all__ = [
     "save_ai_result",
     "save_extracted_fields",
     "save_findings",
+    "save_review",
+    "update_case_status",
+    "CASE_STATUSES",
     "CUSTOMER_COLUMNS",
     "FINDING_KINDS",
+    "REVIEW_DECISIONS",
 ]

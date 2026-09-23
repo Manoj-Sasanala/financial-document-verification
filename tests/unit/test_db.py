@@ -819,3 +819,114 @@ def test_load_missing_ai_result_is_explicit(tmp_path: Path):
         load_ai_result(db_path, "CASE-NOPE")
 
     assert exc_info.value.code == "AI_RESULT_NOT_FOUND"
+
+
+# ---------------------------------------------------------------------------
+# DB-06: Case repository (DoD: create, update and retrieve flows covered;
+# repository persists and reconstructs a complete case)
+# ---------------------------------------------------------------------------
+
+from app.db.repository import (  # noqa: E402
+    create_case,
+    get_case,
+    save_review,
+    update_case_status,
+)
+
+
+def _repo_case(db_path: Path, case_id: str = "CASE-DB06-001"):
+    from scripts.seed_db import seed_customers as _seed2
+
+    _seed2(db_path)
+    return create_case(
+        db_path, case_id, "CUST-0001", "proof.pdf", "application/pdf"
+    )
+
+
+def test_repository_create_update_and_retrieve(tmp_path: Path):
+    db_path = tmp_path / "test.db"
+
+    initialize_database(db_path)
+    _repo_case(db_path)
+
+    update_case_status(db_path, "CASE-DB06-001", "completed")
+    save_review(db_path, "CASE-DB06-001", "approve", "Looks good.")
+
+    case = get_case(db_path, "CASE-DB06-001")
+
+    assert case["case_id"] == "CASE-DB06-001"
+    assert case["customer_id"] == "CUST-0001"
+    assert case["status"] == "completed"
+    assert case["review_decision"] == "approve"
+    assert case["review_comment"] == "Looks good."
+    assert case["reviewed_at"]
+
+
+def test_repository_reconstructs_complete_case(tmp_path: Path):
+    from app.db.repository import save_ai_result as _save_ai
+    from app.db.repository import save_extracted_fields as _save_fields
+    from app.db.repository import save_findings as _save_find
+
+    db_path = tmp_path / "test.db"
+
+    initialize_database(db_path)
+    _repo_case(db_path, case_id="CASE-FULL-001")
+    _save_fields(db_path, "CASE-FULL-001", _db03_fields())
+    findings, comparisons, indicators = _db04_pipeline()
+    _save_find(
+        db_path, "CASE-FULL-001",
+        findings=findings, comparisons=comparisons, indicators=indicators,
+    )
+    _save_ai(
+        db_path, "CASE-FULL-001",
+        ml_classification="mismatch_detected", model_version="1.0.0",
+        retrieval_status="evidence_found",
+        evidence_refs=[{"source_id": "POL-RISK-001", "version": "1.0.0", "chunk_id": "POL-RISK-001#chunk-001"}],
+        explanation_status="available", explanation_text="Name differs.",
+    )
+    save_review(db_path, "CASE-FULL-001", "request_information", "Need clearer scan.")
+
+    case = get_case(db_path, "CASE-FULL-001")
+
+    assert set(case["extracted_fields"]) == {
+        "customer_name", "address", "document_type", "document_date",
+        "issuer_name", "document_number", "postal_code",
+    }
+    assert any(r["ref"] == "name_mismatch" for r in case["findings"])
+    assert case["ai_result"]["model_version"] == "1.0.0"
+    assert case["review_decision"] == "request_information"
+
+
+def test_repository_rejects_unknown_customer(tmp_path: Path):
+    db_path = tmp_path / "test.db"
+
+    initialize_database(db_path)
+
+    with pytest.raises(RepositoryError) as exc_info:
+        create_case(db_path, "CASE-X", "CUST-9999", "f.pdf", "application/pdf")
+    assert exc_info.value.code == "CUSTOMER_NOT_FOUND"
+
+
+def test_repository_rejects_invalid_status_and_decision(tmp_path: Path):
+    db_path = tmp_path / "test.db"
+
+    initialize_database(db_path)
+    _repo_case(db_path)
+
+    with pytest.raises(RepositoryError) as exc_info:
+        update_case_status(db_path, "CASE-DB06-001", "guessed")
+    assert exc_info.value.code == "INVALID_STATUS"
+
+    with pytest.raises(RepositoryError) as exc_info:
+        save_review(db_path, "CASE-DB06-001", "maybe")
+    assert exc_info.value.code == "INVALID_DECISION"
+
+
+def test_repository_get_missing_case_is_explicit(tmp_path: Path):
+    db_path = tmp_path / "test.db"
+
+    initialize_database(db_path)
+
+    with pytest.raises(RepositoryError) as exc_info:
+        get_case(db_path, "CASE-NOPE")
+    assert exc_info.value.code == "CASE_NOT_FOUND"
