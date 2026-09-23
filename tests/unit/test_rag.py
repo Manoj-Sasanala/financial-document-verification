@@ -362,3 +362,63 @@ def test_rebuild_is_deterministic() -> None:
     stored = _np.load(_EMB_PATH)[:3]
 
     assert _np.allclose(rebuilt, stored, atol=1e-5)
+
+
+# ---------------------------------------------------------------------------
+# RAG-04: FAISS index (DoD: index loads and maps vectors to correct
+# metadata; known policy query retrieves the expected source/chunk)
+# ---------------------------------------------------------------------------
+
+from app.rag.index import INDEX_PATH as _INDEX_PATH  # noqa: E402
+from app.rag.index import IndexError as _IndexError  # noqa: E402
+from app.rag.index import build_index as _build_index  # noqa: E402
+from app.rag.index import load_index as _load_index  # noqa: E402
+
+
+def test_index_loads_with_expected_count() -> None:
+    assert _INDEX_PATH.is_file(), f"Missing {_INDEX_PATH}"
+    index = _load_index()
+
+    assert index.ntotal == 35
+    assert index.d == 384
+
+
+def test_index_maps_vectors_to_chunk_metadata() -> None:
+    import json as _json
+
+    metadata = _json.loads(
+        (PROJECT_ROOT / "artifacts" / "rag" / "metadata.json").read_text(encoding="utf-8")
+    )
+
+    assert metadata["index"]["ntotal"] == 35
+    assert metadata["index"]["type"] == "IndexFlatIP"
+    assert len(metadata["chunk_ids"]) == _load_index().ntotal
+
+
+def test_known_policy_query_retrieves_expected_source() -> None:
+    import json as _json
+
+    from app.rag.embeddings import load_model as _load_model
+
+    metadata = _json.loads(
+        (PROJECT_ROOT / "artifacts" / "rag" / "metadata.json").read_text(encoding="utf-8")
+    )
+    model = _load_model()
+    query = model.encode(
+        ["document customer name does not match the reference customer name"],
+        normalize_embeddings=True,
+    )
+    _, positions = _load_index().search(_np.asarray(query, dtype="float32"), 3)
+    top_sources = {metadata["chunk_ids"][int(i)].split("#")[0] for i in positions[0]}
+
+    assert "POL-RISK-001" in top_sources
+
+
+def test_missing_index_is_explicit(tmp_path) -> None:
+    with pytest.raises(_IndexError) as exc_info:
+        _load_index(tmp_path / "nope.index")
+    assert exc_info.value.code == "INDEX_MISSING"
+
+
+def test_rebuilt_index_matches_committed_count() -> None:
+    assert _build_index().ntotal == _load_index().ntotal == 35
