@@ -300,3 +300,79 @@ def _make_blank_pdf_bytes() -> bytes:
     buffer = _BytesIO()
     writer.write(buffer)
     return buffer.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# DOC-04: Fixed field parser (DoD: fixed schema, never invents missing fields;
+# clean document yields all required fields present)
+# ---------------------------------------------------------------------------
+
+from app.document.field_parser import (  # noqa: E402
+    FieldParserError,
+    parse_fields,
+)
+
+
+def test_clean_document_yields_required_fields():
+    from pathlib import Path as _Path
+
+    from app.document.pdf_extract import extract_pdf_text as _extract
+
+    text = _extract(_Path("data/synthetic/documents/template.pdf").read_bytes()).text
+    parsed = parse_fields(text)
+
+    assert parsed.fields.customer_name.status == "present"
+    assert parsed.fields.customer_name.raw_value == "Aarav Mehta"
+    assert parsed.fields.address.status == "present"
+    assert parsed.fields.address.raw_value == "42 Example Avenue, Vijayawada"
+    assert parsed.fields.postal_code.status == "present"
+    assert parsed.fields.postal_code.raw_value == "520001"
+    assert parsed.customer_id == "CUST-0001"
+
+
+def test_absent_fields_are_missing_not_invented():
+    parsed = parse_fields("Customer Name\nAarav Mehta\nPostal Code\n520001")
+
+    assert parsed.fields.document_type.status == "missing"
+    assert parsed.fields.document_type.raw_value is None
+    assert parsed.fields.document_date.status == "missing"
+    assert parsed.fields.issuer_name.status == "missing"
+    assert parsed.fields.document_number.status == "missing"
+
+
+def test_empty_label_value_is_uncertain():
+    parsed = parse_fields("Customer Name\nAarav Mehta\nAddress\n\nPostal Code\n520001")
+
+    assert parsed.fields.address.status == "uncertain"
+    assert parsed.fields.address.raw_value is None
+
+
+def test_inline_label_form_is_parsed():
+    parsed = parse_fields("Customer Name: Maya Rao\nAddress: 17 Sample Street\nPostal Code: 522001")
+
+    assert parsed.fields.customer_name.raw_value == "Maya Rao"
+    assert parsed.fields.address.raw_value == "17 Sample Street"
+    assert parsed.fields.postal_code.raw_value == "522001"
+
+
+def test_empty_text_is_explicit_failure():
+    with _pytest.raises(FieldParserError) as exc_info:
+        parse_fields("   ")
+    assert exc_info.value.code == "EMPTY_TEXT"
+
+
+def test_parser_output_uses_frozen_contract():
+    from app.core.contracts import ExtractedFields
+
+    parsed = parse_fields("Customer Name\nAarav Mehta")
+
+    assert isinstance(parsed.fields, ExtractedFields)
+    assert set(ExtractedFields.model_fields.keys()) == {
+        "customer_name",
+        "address",
+        "document_type",
+        "document_date",
+        "issuer_name",
+        "document_number",
+        "postal_code",
+    }
