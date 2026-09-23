@@ -376,3 +376,66 @@ def test_parser_output_uses_frozen_contract():
         "document_number",
         "postal_code",
     }
+
+
+# ---------------------------------------------------------------------------
+# DOC-05: Missing/uncertain evidence (DoD: negative-path tests return explicit
+# field status; missing fields stay missing/uncertain, never silently filled)
+# ---------------------------------------------------------------------------
+
+from app.document.evidence import (  # noqa: E402
+    EvidenceError,
+    assert_no_silent_fill,
+    build_evidence,
+)
+
+
+def test_missing_address_case_stays_uncertain_with_evidence():
+    parsed = parse_fields("Customer Name\nAarav Mehta\nAddress\n\nPostal Code\n520001")
+    bundle = build_evidence(parsed, doc_sha256="abc123", extraction_method="native_text")
+
+    assert bundle.status_of("address") == "uncertain"
+    assert bundle.status_of("customer_name") == "present"
+    assert bundle.status_of("document_type") == "missing"
+    assert_no_silent_fill(bundle, parsed)
+    assert bundle.provenance["doc_sha256"] == "abc123"
+
+
+def test_unreadable_case_stays_all_missing():
+    parsed = parse_fields("████ ▓▓▓▓ ??? unreadable/OCR-hostile ???")
+    bundle = build_evidence(parsed)
+
+    assert {f.status for f in bundle.fields} == {"missing"}
+    assert all(f.raw_value is None for f in bundle.fields)
+    assert_no_silent_fill(bundle, parsed)
+
+
+def test_invalid_date_text_is_not_altered_by_evidence():
+    parsed = parse_fields("Customer Name\nAarav Mehta\nDocument Date\n2026-02-30")
+    bundle = build_evidence(parsed)
+
+    assert bundle.status_of("document_date") == "present"
+    record = next(f for f in bundle.fields if f.field_name == "document_date")
+    assert record.raw_value == "2026-02-30"
+    assert_no_silent_fill(bundle, parsed)
+
+
+def test_evidence_bundle_hash_is_deterministic():
+    parsed = parse_fields("Customer Name\nAarav Mehta\nPostal Code\n520001")
+
+    assert build_evidence(parsed).bundle_hash == build_evidence(parsed).bundle_hash
+
+
+def test_evidence_rejects_non_parser_input():
+    with _pytest.raises(EvidenceError) as exc_info:
+        build_evidence({"not": "parsed"})  # type: ignore[arg-type]
+    assert exc_info.value.code == "INVALID_INPUT_TYPE"
+
+
+def test_evidence_status_lookup_rejects_unknown_field():
+    parsed = parse_fields("Customer Name\nAarav Mehta")
+    bundle = build_evidence(parsed)
+
+    with _pytest.raises(EvidenceError) as exc_info:
+        bundle.status_of("passport_number")
+    assert exc_info.value.code == "UNKNOWN_FIELD"
