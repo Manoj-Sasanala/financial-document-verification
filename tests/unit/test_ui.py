@@ -124,3 +124,60 @@ def test_clean_and_missing_payloads_fit_renderer(tmp_path: Path) -> None:
     assert clean.model_dump()["postal_code"]["normalized_value"] == "520001"
     assert missing.model_dump()["address"]["status"] == "missing"
     assert missing.model_dump()["address"]["normalized_value"] is None
+
+
+# ---------------------------------------------------------------------------
+# UI-03: Comparisons and risk indicators (DoD: deterministic findings clearly
+# distinguishable from AI outputs; mismatch cases show correct findings)
+# ---------------------------------------------------------------------------
+
+
+def test_comparison_and_indicator_sections_exist() -> None:
+    html = _html()
+
+    assert 'id="comparisons-table"' in html
+    assert 'id="comparisons-body"' in html
+    assert 'id="indicators-list"' in html
+    assert html.count('badge deterministic') == 2
+
+
+def test_renderer_covers_comparisons_and_indicators() -> None:
+    js = JS_PATH.read_text(encoding="utf-8")
+
+    assert "renderComparisons" in js
+    assert "renderIndicators" in js
+    assert "observed_value" in js
+    assert "reference_value" in js
+    assert "indicator_code" in js
+    assert "rule_id" in js
+
+
+def test_mismatch_payloads_fit_renderer() -> None:
+    from app.document.field_parser import parse_fields
+    from app.verification.compare import compare_fields
+    from app.verification.normalize import normalize_fields
+    from app.verification.risk_rules import assess_risk
+    from app.verification.validate import validate_fields
+
+    ref = {
+        "customer_id": "CUST-0001",
+        "customer_name": "Aarav Mehta",
+        "address": "42 Example Avenue, Vijayawada",
+        "postal_code": "520001",
+    }
+    cases = {
+        "name": "Customer Name\nAarav Sharma\nAddress\n42 Example Avenue, Vijayawada\nPostal Code\n520001",
+        "address": "Customer Name\nAarav Mehta\nAddress\n99 Synthetic Street, Vijayawada\nPostal Code\n520001",
+    }
+    expected = {"name": "name_mismatch", "address": "address_mismatch"}
+    for kind, text in cases.items():
+        normalized = normalize_fields(parse_fields(text).fields)
+        comparisons = compare_fields(normalized, ref)
+        indicators = assess_risk(validate_fields(normalized), comparisons)
+        codes = [i.indicator_code for i in indicators]
+        assert codes == [expected[kind]]
+        assert any(c.status == "mismatch" for c in comparisons)
+        for comparison in comparisons:
+            assert {"field_name", "status", "observed_value", "reference_value"} <= set(
+                comparison.model_dump()
+            )
