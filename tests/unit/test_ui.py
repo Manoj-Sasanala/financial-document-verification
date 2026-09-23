@@ -224,3 +224,75 @@ def test_unavailable_explanation_still_fits_renderer() -> None:
     assert dumped["status"] == "unavailable"
     assert dumped["explanation"] is None
     assert set(dumped.keys()) == {"status", "explanation", "evidence_refs"}
+
+
+# ---------------------------------------------------------------------------
+# UI-05: Human decision controls (DoD: review stored and shown after
+# retrieval; one valid decision submittable, invalid rejected)
+# ---------------------------------------------------------------------------
+
+
+def test_decision_controls_cover_all_decisions() -> None:
+    html = _html()
+
+    assert 'id="decision-controls"' in html
+    assert 'id="review-comment"' in html
+    assert 'id="stored-decision"' in html
+    for decision in ("approve", "reject", "request_information"):
+        assert f'data-decision="{decision}"' in html
+
+
+def test_script_posts_decisions_to_review_endpoint() -> None:
+    js = JS_PATH.read_text(encoding="utf-8")
+
+    assert "submitDecision" in js
+    assert "/api/v1/cases/" in js
+    assert "/review" in js
+    assert "application/json" in js
+
+
+def test_valid_decision_stored_and_shown_after_retrieval(tmp_path: Path) -> None:
+    db_path = tmp_path / "ui05.db"
+    initialize_database(db_path)
+    seed_customers(db_path)
+    os.environ["CASE_DB_PATH"] = str(db_path)
+    client = TestClient(app)
+
+    pdf = (PROJECT_ROOT / "data" / "synthetic" / "documents" / "template.pdf").read_bytes()
+    created = client.post(
+        "/api/v1/cases",
+        data={"customer_id": "CUST-0001"},
+        files={"file": ("proof.pdf", pdf, "application/pdf")},
+    )
+    assert created.status_code == 201
+    case_id = created.json()["case_id"]
+
+    review = client.post(
+        f"/api/v1/cases/{case_id}/review",
+        json={"decision": "reject", "comment": "Needs review."},
+    )
+    assert review.status_code == 200
+
+    retrieved = client.get(f"/api/v1/cases/{case_id}")
+    assert retrieved.status_code == 200
+    assert retrieved.json()["review"]["decision"] == "reject"
+    assert retrieved.json()["review"]["comment"] == "Needs review."
+
+
+def test_invalid_decision_rejected(tmp_path: Path) -> None:
+    db_path = tmp_path / "ui05b.db"
+    initialize_database(db_path)
+    seed_customers(db_path)
+    os.environ["CASE_DB_PATH"] = str(db_path)
+    client = TestClient(app)
+
+    pdf = (PROJECT_ROOT / "data" / "synthetic" / "documents" / "template.pdf").read_bytes()
+    case_id = client.post(
+        "/api/v1/cases",
+        data={"customer_id": "CUST-0001"},
+        files={"file": ("proof.pdf", pdf, "application/pdf")},
+    ).json()["case_id"]
+
+    assert client.post(
+        f"/api/v1/cases/{case_id}/review", json={"decision": "maybe"}
+    ).status_code == 422
