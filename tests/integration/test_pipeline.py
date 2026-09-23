@@ -182,3 +182,76 @@ def test_clean_case_completes_through_upload_decision_storage(tmp_path: Path) ->
     assert stored["review"]["decision"] == "approve"
     assert stored["fields"]["customer_name"]["raw_value"] == "Aarav Mehta"
     assert stored["risk_indicators"] == []
+
+
+# ---------------------------------------------------------------------------
+# QA-03: Mismatch/indicator scenarios (DoD: name, address and missing-field
+# cases pass; findings match scenario ground truth exactly)
+# ---------------------------------------------------------------------------
+
+
+def _seed_text_case(tmp_path: Path, case_id: str, text: str) -> Path:
+    from app.document.field_parser import parse_fields
+    from app.verification.compare import compare_fields
+    from app.verification.normalize import normalize_fields
+    from app.verification.risk_rules import assess_risk
+    from app.verification.validate import validate_fields
+
+    db_path = tmp_path / f"{case_id.lower().replace('-', '_')}.db"
+    initialize_database(db_path)
+    seed_customers(db_path)
+    create_case(db_path, case_id, "CUST-0001", "proof.pdf", "application/pdf")
+
+    ref = {
+        "customer_id": "CUST-0001",
+        "customer_name": "Aarav Mehta",
+        "address": "42 Example Avenue, Vijayawada",
+        "postal_code": "520001",
+    }
+    normalized = normalize_fields(parse_fields(text).fields)
+    findings = validate_fields(normalized)
+    comparisons = compare_fields(normalized, ref)
+    indicators = assess_risk(findings, comparisons)
+    save_extracted_fields(db_path, case_id, normalized)
+    save_findings(
+        db_path, case_id, findings=findings,
+        comparisons=comparisons, indicators=indicators,
+    )
+    return db_path
+
+
+def test_name_mismatch_matches_ground_truth(tmp_path: Path) -> None:
+    db_path = _seed_text_case(
+        tmp_path,
+        "CASE-QA03-NAME",
+        "Customer Name\nAarav Sharma\nAddress\n42 Example Avenue, Vijayawada\nPostal Code\n520001",
+    )
+    result = process_case("CASE-QA03-NAME", db_path=db_path)
+
+    assert [i.indicator_code for i in result.risk_indicators] == ["name_mismatch"]
+    assert [c.status for c in result.comparisons if c.field_name == "customer_name"] == ["mismatch"]
+    assert result.ml_classification is not None
+
+
+def test_address_mismatch_matches_ground_truth(tmp_path: Path) -> None:
+    db_path = _seed_text_case(
+        tmp_path,
+        "CASE-QA03-ADDR",
+        "Customer Name\nAarav Mehta\nAddress\n99 Synthetic Street, Vijayawada\nPostal Code\n520001",
+    )
+    result = process_case("CASE-QA03-ADDR", db_path=db_path)
+
+    assert [i.indicator_code for i in result.risk_indicators] == ["address_mismatch"]
+    assert [c.status for c in result.comparisons if c.field_name == "address"] == ["mismatch"]
+
+
+def test_missing_field_matches_ground_truth(tmp_path: Path) -> None:
+    db_path = _seed_text_case(
+        tmp_path,
+        "CASE-QA03-MISS",
+        "Customer Name\nAarav Mehta\nAddress\n\nPostal Code\n520001",
+    )
+    result = process_case("CASE-QA03-MISS", db_path=db_path)
+
+    assert [i.indicator_code for i in result.risk_indicators] == ["missing_required_field"]
+    assert result.fields.address.status == "missing" or result.fields.address.status == "uncertain"

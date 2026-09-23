@@ -1,0 +1,10 @@
+{
+  "task_id": "QA-03",
+  "report": "mismatch and indicator scenarios",
+  "ground_truth": "data/synthetic/scenarios.json (DATA-04/DATA-05)",
+  "cases": {
+    "name_mismatch": ["name_mismatch"],
+    "address_mismatch": ["address_mismatch"],
+    "missing_field": ["missing_required_field"]
+  }
+}
