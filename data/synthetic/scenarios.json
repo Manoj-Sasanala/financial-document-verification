@@ -1,3 +1,4 @@
+
 {
   "schema_version": "1.0.0",
   "task_id": "DATA-04",
@@ -91,6 +92,130 @@
           "address": "99 Synthetic Street, Vijayawada",
           "postal_code": "520001"
         }
+      },
+      "provenance": {
+        "source_customer": "data/synthetic/customers.json",
+        "source_template": "data/synthetic/documents/template.html"
+      }
+    },
+    {
+      "scenario_id": "DATA-05-MISSING-ADDRESS-001",
+      "scenario_type": "missing_field",
+      "customer_id": "CUST-0001",
+      "document_path": "data/synthetic/documents/edge/CUST-0001-missing-address.html",
+      "template_version": "1.0.0",
+      "generator_version": "1.0.0",
+      "ground_truth": {
+        "expected_outcome": "validation_failure",
+        "expected_indicator": "missing_field",
+        "missing_fields": [
+          "address"
+        ],
+        "reference": {
+          "customer_id": "CUST-0001",
+          "customer_name": "Aarav Mehta",
+          "address": "42 Example Avenue, Vijayawada",
+          "postal_code": "520001"
+        },
+        "observed": {
+          "customer_id": "CUST-0001",
+          "customer_name": "Aarav Mehta",
+          "address": "",
+          "postal_code": "520001"
+        }
+      },
+      "provenance": {
+        "source_customer": "data/synthetic/customers.json",
+        "source_template": "data/synthetic/documents/template.html"
+      }
+    },
+    {
+      "scenario_id": "DATA-05-INVALID-DATE-001",
+      "scenario_type": "invalid_date",
+      "customer_id": "CUST-0001",
+      "document_path": "data/synthetic/documents/edge/CUST-0001-invalid-date.html",
+      "template_version": "1.0.0",
+      "generator_version": "1.0.0",
+      "ground_truth": {
+        "expected_outcome": "validation_failure",
+        "expected_indicator": "invalid_date",
+        "reference": {
+          "customer_id": "CUST-0001",
+          "customer_name": "Aarav Mehta",
+          "address": "42 Example Avenue, Vijayawada",
+          "postal_code": "520001"
+        },
+        "observed": {
+          "customer_id": "CUST-0001",
+          "customer_name": "Aarav Mehta",
+          "address": "42 Example Avenue, Vijayawada",
+          "postal_code": "520001",
+          "document_date": "2026-02-30"
+        }
+      },
+      "provenance": {
+        "source_customer": "data/synthetic/customers.json",
+        "source_template": "data/synthetic/documents/template.html"
+      }
+    },
+    {
+      "scenario_id": "DATA-05-UNSUPPORTED-DOCUMENT-001",
+      "scenario_type": "unsupported_document",
+      "customer_id": "CUST-0001",
+      "document_path": "data/synthetic/documents/edge/CUST-0001-unsupported-document.html",
+      "template_version": "unsupported-1.0.0",
+      "generator_version": "1.0.0",
+      "ground_truth": {
+        "expected_outcome": "validation_failure",
+        "expected_indicator": "unsupported_document",
+        "reference": {
+          "customer_id": "CUST-0001",
+          "customer_name": "Aarav Mehta",
+          "address": "42 Example Avenue, Vijayawada",
+          "postal_code": "520001"
+        },
+        "observed_document_type": "utility_service_notice"
+      },
+      "provenance": {
+        "source_customer": "data/synthetic/customers.json",
+        "source_template": "data/synthetic/documents/template.html"
+      }
+    },
+    {
+      "scenario_id": "DATA-05-UNKNOWN-CUSTOMER-001",
+      "scenario_type": "unknown_customer",
+      "customer_id": "CUST-9999",
+      "document_path": "data/synthetic/documents/edge/CUST-9999-unknown-customer.html",
+      "template_version": "1.0.0",
+      "generator_version": "1.0.0",
+      "ground_truth": {
+        "expected_outcome": "reference_failure",
+        "expected_indicator": "unknown_customer",
+        "reference_customer_exists": false,
+        "observed": {
+          "customer_id": "CUST-9999",
+          "customer_name": "Synthetic Unknown Customer",
+          "address": "1 Synthetic Unknown Street, Vijayawada",
+          "postal_code": "520999"
+        }
+      },
+      "provenance": {
+        "source_customer": "data/synthetic/customers.json",
+        "source_template": "data/synthetic/documents/template.html"
+      }
+    },
+    {
+      "scenario_id": "DATA-05-UNREADABLE-OCR-001",
+      "scenario_type": "unreadable_ocr",
+      "customer_id": "CUST-0001",
+      "document_path": "data/synthetic/documents/edge/CUST-0001-unreadable-ocr.html",
+      "template_version": "1.0.0",
+      "generator_version": "1.0.0",
+      "ground_truth": {
+        "expected_outcome": "validation_failure",
+        "expected_indicator": "unreadable_ocr",
+        "extraction_status": "unreadable",
+        "required_fields_extracted": false
       },
       "provenance": {
         "source_customer": "data/synthetic/customers.json",
