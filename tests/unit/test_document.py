@@ -439,3 +439,71 @@ def test_evidence_status_lookup_rejects_unknown_field():
     with _pytest.raises(EvidenceError) as exc_info:
         bundle.status_of("passport_number")
     assert exc_info.value.code == "UNKNOWN_FIELD"
+
+
+# ---------------------------------------------------------------------------
+# DOC-06: Extraction result object (DoD: raw + source metadata survive through
+# the result; page/source refs available for supported PDF inputs)
+# ---------------------------------------------------------------------------
+
+from app.document.evidence import (  # noqa: E402
+    ExtractionResult,
+    extraction_source_refs,
+    from_pdf_bytes,
+    from_text,
+)
+
+
+def test_pdf_extraction_result_preserves_raw_and_refs():
+    from pathlib import Path as _Path
+
+    pdf_bytes = _Path("data/synthetic/documents/template.pdf").read_bytes()
+    result = from_pdf_bytes(pdf_bytes, filename="template.pdf")
+
+    assert isinstance(result, ExtractionResult)
+    assert result.method == "native_text"
+    assert result.page_count == 1
+    assert "Aarav Mehta" in result.text
+    assert result.parsed.fields.customer_name.raw_value == "Aarav Mehta"
+    assert result.bundle.status_of("postal_code") == "present"
+
+    refs = extraction_source_refs(result)
+    assert "page-1#customer-name" in refs
+    assert "template.pdf#page=1" in refs
+
+
+def test_ocr_text_result_preserves_evidence():
+    result = from_text(
+        "Customer Name\nAarav Mehta\nPostal Code\n520001", method="ocr"
+    )
+
+    assert result.method == "ocr"
+    assert result.parsed.fields.address.status == "missing"
+    assert result.bundle.status_of("address") == "missing"
+    assert "page-1#customer-name" in extraction_source_refs(result)
+
+
+def test_pdf_result_maps_to_frozen_provenance_contract():
+    from pathlib import Path as _Path
+
+    from app.core.contracts import Provenance
+    from datetime import datetime as _datetime, timezone as _timezone
+
+    pdf_bytes = _Path("data/synthetic/documents/template.pdf").read_bytes()
+    result = from_pdf_bytes(pdf_bytes)
+
+    provenance = Provenance(
+        processed_at=_datetime.now(_timezone.utc),
+        rule_versions=[],
+        policy_source_versions=[],
+        extraction_source_refs=extraction_source_refs(result),
+    )
+
+    assert provenance.extraction_source_refs
+    assert all(isinstance(ref, str) for ref in provenance.extraction_source_refs)
+
+
+def test_pdf_extraction_failure_is_explicit():
+    with _pytest.raises(EvidenceError) as exc_info:
+        from_pdf_bytes(b"not a pdf at all")
+    assert exc_info.value.code in {"INVALID_PDF_SIGNATURE", "EXTRACTION_FAILED"}
