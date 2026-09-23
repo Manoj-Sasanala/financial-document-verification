@@ -286,3 +286,53 @@ def test_committed_artifacts_exist_with_version(tmp_path) -> None:
     assert (_ARTIFACTS / "classifier.joblib").is_file()
     metadata = json.loads((_ARTIFACTS / "model_metadata.json").read_text(encoding="utf-8"))
     assert metadata["model_version"] == "1.0.0"
+
+
+# ---------------------------------------------------------------------------
+# ML-03: Evaluate classifier (DoD: metric generated + synthetic limitation
+# documented; held-out only with dataset/version recorded)
+# ---------------------------------------------------------------------------
+
+from app.ml.evaluate import evaluate as _evaluate  # noqa: E402
+from app.ml.evaluate import load_jsonl_ids as _ids  # noqa: E402
+
+
+def test_evaluation_runs_on_committed_artifacts() -> None:
+    report = _evaluate()
+
+    assert report["model_version"] == "1.0.0"
+    assert report["dataset"] == "data/ml/test.jsonl"
+    assert report["num_examples"] == 6
+    assert 0.0 <= report["accuracy"] <= 1.0
+    assert set(report["per_label"]) == {
+        "consistent",
+        "mismatch_detected",
+        "insufficient_evidence",
+    }
+    assert len(report["predictions"]) == 6
+
+
+def test_evaluation_uses_only_held_out_examples() -> None:
+    report = _evaluate()
+
+    assert set(report["example_ids"]) == _ids(PROJECT_ROOT / "data" / "ml" / "test.jsonl")
+    assert not (set(report["example_ids"]) & _ids(PROJECT_ROOT / "data" / "ml" / "train.jsonl"))
+
+
+def test_evaluation_records_version_and_limitation(tmp_path) -> None:
+    from app.ml.evaluate import write_evaluation as _write
+
+    report = _evaluate()
+    out = _write(report, tmp_path / "evaluation.json")
+    stored = json.loads(out.read_text(encoding="utf-8"))
+
+    assert stored["model_version"] == "1.0.0"
+    assert "Synthetic-only" in stored["limitation"] or "synthetic" in stored["limitation"]
+
+
+def test_synthetic_limitation_is_documented() -> None:
+    doc = (PROJECT_ROOT / "docs" / "data-scenarios.md").read_text(encoding="utf-8")
+
+    assert "ML-03" in doc
+    assert "data/ml/test.jsonl" in doc
+    assert "must not be interpreted as production" in doc

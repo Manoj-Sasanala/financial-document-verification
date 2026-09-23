@@ -76,3 +76,15 @@ The lookup stage is responsible for returning the controlled `not_found` result.
 All customer records and document scenarios must contain fake/synthetic information.
 
 No real customer information, credentials, secrets, API keys, or private documents belong in this dataset.
+
+## ML-03 — Held-out evaluation
+
+The TF-IDF + Logistic Regression model (model version `1.0.0`, 9 training
+examples) is evaluated exclusively on the held-out set
+`data/ml/test.jsonl` (6 examples, 2 per class). The report at
+`artifacts/ml/evaluation.json` records the model version, dataset path,
+evaluated example IDs and per-label correct/total counts.
+
+Limitation: this is synthetic-only demo data (15 labeled cases total).
+Reported metrics describe prototype behavior on controlled fixtures and
+must not be interpreted as production classification performance.
