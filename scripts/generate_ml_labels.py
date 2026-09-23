@@ -3,9 +3,10 @@
 Builds the small supervised dataset for case classification from the
 DATA-04 and DATA-05 scenarios.
 
-Outputs (canonical storage):
-  data/synthetic/ml/train.json
-  data/synthetic/ml/test.json
+Outputs (canonical storage, per repo file-structure map):
+  data/ml/train.jsonl
+  data/ml/test.jsonl
+(one labeled example per line; file-level counts derived, provenance per example)
 
 Label contract (frozen Step 9.6 / Step 6, see app/core/contracts.py MLResult):
   consistent | mismatch_detected | insufficient_evidence
@@ -39,9 +40,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 CUSTOMERS_PATH = PROJECT_ROOT / "data" / "synthetic" / "customers.json"
 SCENARIOS_PATH = PROJECT_ROOT / "data" / "synthetic" / "scenarios.json"
 
-ML_DIR = PROJECT_ROOT / "data" / "synthetic" / "ml"
-TRAIN_PATH = ML_DIR / "train.json"
-TEST_PATH = ML_DIR / "test.json"
+ML_DIR = PROJECT_ROOT / "data" / "ml"
+TRAIN_PATH = ML_DIR / "train.jsonl"
+TEST_PATH = ML_DIR / "test.jsonl"
 
 SCHEMA_VERSION = "1.0.0"
 GENERATOR_VERSION = "1.0.0"
@@ -335,6 +336,7 @@ def make_example(
         "observed": observed,
         "provenance": {
             "task_id": TASK_ID,
+            "schema_version": SCHEMA_VERSION,
             "generator_version": GENERATOR_VERSION,
             "source_scenarios": "data/synthetic/scenarios.json",
             "source_customer_file": "data/synthetic/customers.json",
@@ -428,24 +430,36 @@ def validate_class_coverage(examples: list[dict[str, Any]], split: str) -> None:
 
 
 def write_dataset(path: Path, split: str, examples: list[dict[str, Any]]) -> None:
-    from collections import Counter
-
-    label_counts = dict(Counter(e["label"] for e in examples))
-    payload = {
-        "schema_version": SCHEMA_VERSION,
-        "task_id": TASK_ID,
-        "split": split,
-        "generator_version": GENERATOR_VERSION,
-        "synthetic_only": True,
-        "label_contract": list(ALLOWED_LABELS),
-        "source_scenarios": "data/synthetic/scenarios.json",
-        "source_customer_file": "data/synthetic/customers.json",
-        "num_examples": len(examples),
-        "label_counts": label_counts,
-        "examples": examples,
-    }
+    """Write one labeled example per line (JSONL, deterministic order)."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=False) + "\n", encoding="utf-8")
+    with path.open("w", encoding="utf-8") as fh:
+        for example in examples:
+            fh.write(json.dumps(example, sort_keys=False) + "\n")
+
+
+def read_dataset(path: Path) -> list[dict[str, Any]]:
+    """Read a JSONL dataset (one example per line); skips blank lines."""
+    if not path.is_file():
+        raise MLLabelError("FILE_NOT_FOUND", f"Required dataset not found: {path}")
+    examples: list[dict[str, Any]] = []
+    with path.open("r", encoding="utf-8") as fh:
+        for lineno, line in enumerate(fh, start=1):
+            if not line.strip():
+                continue
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise MLLabelError(
+                    "INVALID_JSONL", f"Invalid JSON on line {lineno} of {path}: {exc}"
+                ) from exc
+            if not isinstance(obj, dict):
+                raise MLLabelError(
+                    "INVALID_EXAMPLE", f"Line {lineno} of {path} must be a JSON object"
+                )
+            examples.append(obj)
+    if not examples:
+        raise MLLabelError("EMPTY_DATASET", f"Dataset is empty: {path}")
+    return examples
 
 
 def main() -> None:
