@@ -1,0 +1,14 @@
+{
+  "model_version": "1.0.0",
+  "task_id": "ML-02",
+  "feature_schema": "1.0.0",
+  "model": "TfidfVectorizer(1,2)+LogisticRegression",
+  "random_state": 42,
+  "sklearn_version": "1.9.1",
+  "num_train_examples": 9,
+  "labels": [
+    "consistent",
+    "insufficient_evidence",
+    "mismatch_detected"
+  ]
+}
