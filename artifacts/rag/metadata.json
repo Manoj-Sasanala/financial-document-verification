@@ -50,5 +50,14 @@
     "tokenizers": "0.23.2",
     "torch": "2.13.0+cpu",
     "numpy": "2.5.2"
+  },
+  "index": {
+    "task_id": "RAG-04",
+    "type": "IndexFlatIP",
+    "metric": "cosine-via-inner-product",
+    "ntotal": 35,
+    "dim": 384,
+    "faiss_version": "1.15.1",
+    "path": "artifacts/rag/faiss.index"
   }
 }
