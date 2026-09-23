@@ -126,18 +126,64 @@
       explanation.explanation || "No explanation available.";
   }
 
+  var currentCaseId = null;
+
+  function renderDecision(payload) {
+    var review = payload.review || {};
+    document.getElementById("stored-decision").textContent =
+      review.decision || "—";
+  }
+
+  function submitDecision(decision) {
+    if (!currentCaseId) {
+      showError("Analyze a case before submitting a decision.");
+      return;
+    }
+    var comment = document.getElementById("review-comment").value || null;
+    fetch("/api/v1/cases/" + encodeURIComponent(currentCaseId) + "/review", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decision: decision, comment: comment })
+    })
+      .then(function (response) {
+        if (!response.ok) {
+          return response.json().then(function (body) {
+            throw new Error(body.detail || ("Review failed: " + response.status));
+          });
+        }
+        return response.json();
+      })
+      .then(function (body) {
+        document.getElementById("stored-decision").textContent =
+          body.decision || decision;
+        document.getElementById("error").hidden = true;
+      })
+      .catch(function (err) {
+        showError(err && err.message ? err.message : "Review failed.");
+      });
+  }
+
   function showResult(payload) {
     document.getElementById("error").hidden = true;
+    currentCaseId = payload.case_id || null;
     document.getElementById("result-status").textContent = payload.status || "unknown";
     renderFields(payload);
     renderComparisons(payload);
     renderIndicators(payload);
     renderAi(payload);
+    renderDecision(payload);
     document.getElementById("result-body").textContent = JSON.stringify(payload, null, 2);
     document.getElementById("result").hidden = false;
   }
 
   document.addEventListener("DOMContentLoaded", function () {
+    var buttons = document.querySelectorAll("#decision-controls button[data-decision]");
+    buttons.forEach(function (button) {
+      button.addEventListener("click", function () {
+        submitDecision(button.getAttribute("data-decision"));
+      });
+    });
+
     var form = document.getElementById("upload-form");
     if (!form) {
       return;

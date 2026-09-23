@@ -53,6 +53,18 @@
       <h4>Explanation <span id="ai-explanation-status"></span></h4>
       <p id="ai-explanation">—</p>
 
+      <h3>Human decision <span class="badge authority">final authority</span></h3>
+      <div id="decision-controls">
+        <label for="review-comment">Comment (optional)</label>
+        <input id="review-comment" name="comment" type="text" maxlength="500">
+        <div class="decision-buttons">
+          <button type="button" data-decision="approve">Approve</button>
+          <button type="button" data-decision="reject">Reject</button>
+          <button type="button" data-decision="request_information">Request information</button>
+        </div>
+        <p>Stored decision: <span id="stored-decision">—</span></p>
+      </div>
+
       <h3>Full payload</h3>
       <pre id="result-body"></pre>
     </section>
