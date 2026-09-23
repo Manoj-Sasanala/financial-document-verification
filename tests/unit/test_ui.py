@@ -72,3 +72,55 @@ def test_form_contract_matches_backend(tmp_path: Path) -> None:
     )
     assert bad.status_code == 400
     assert "detail" in bad.json()
+
+
+# ---------------------------------------------------------------------------
+# UI-02: Field display (DoD: all configured fields visibly represented;
+# clean and missing-field cases render correctly)
+# ---------------------------------------------------------------------------
+
+_CONFIGURED_FIELDS = [
+    "customer_name",
+    "address",
+    "document_type",
+    "document_date",
+    "issuer_name",
+    "document_number",
+    "postal_code",
+]
+
+
+def test_fields_table_covers_all_configured_fields() -> None:
+    html = _html()
+
+    assert 'id="fields-table"' in html
+    assert 'id="fields-body"' in html
+    js = JS_PATH.read_text(encoding="utf-8")
+    for name in _CONFIGURED_FIELDS:
+        assert f'"{name}"' in js
+
+
+def test_renderer_marks_missing_and_uncertain_states() -> None:
+    js = JS_PATH.read_text(encoding="utf-8")
+
+    assert "renderFields" in js
+    assert "data-status" in js
+    assert "normalized_value" in js
+    assert "raw_value" in js
+
+
+def test_clean_and_missing_payloads_fit_renderer(tmp_path: Path) -> None:
+    from app.document.field_parser import parse_fields
+    from app.verification.normalize import normalize_fields
+
+    clean = normalize_fields(
+        parse_fields("Customer Name\nAarav Mehta\nPostal Code\n520001").fields
+    )
+    missing = normalize_fields(parse_fields("Customer Name\nAarav Mehta").fields)
+
+    for record in (clean, missing):
+        dumped = record.model_dump()
+        assert set(dumped.keys()) == set(_CONFIGURED_FIELDS)
+    assert clean.model_dump()["postal_code"]["normalized_value"] == "520001"
+    assert missing.model_dump()["address"]["status"] == "missing"
+    assert missing.model_dump()["address"]["normalized_value"] is None
