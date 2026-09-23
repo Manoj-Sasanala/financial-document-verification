@@ -2,7 +2,15 @@ import json
 import sqlite3
 from pathlib import Path
 
+import pytest
+
+from app.core.contracts import NormalizedFieldValue, NormalizedFields
 from app.db.init_db import initialize_database
+from app.db.repository import (
+    RepositoryError,
+    load_extracted_fields,
+    save_extracted_fields,
+)
 from scripts.seed_db import seed_customers
 
 
@@ -386,3 +394,188 @@ def test_case_rejects_invalid_review_decision(tmp_path: Path):
                 raise AssertionError(
                     "Invalid review decision was accepted"
                 )
+
+
+# ---------------------------------------------------------------------------
+# DB-03: extracted_fields table (DoD: round-trip persistence passes; raw and
+# normalized values remain distinct)
+# ---------------------------------------------------------------------------
+
+
+def _seed_case(db_path: Path, case_id: str = "CASE-DB03-001"):
+    with sqlite3.connect(db_path) as connection:
+        connection.execute(
+            """
+            INSERT INTO customers (
+                customer_id,
+                customer_name,
+                address,
+                postal_code
+            )
+            VALUES (?, ?, ?, ?)
+            """,
+            (
+                "CUST-DB03",
+                "DB03 Customer",
+                "5 Evidence Street, Vijayawada",
+                "520005",
+            ),
+        )
+        connection.execute(
+            """
+            INSERT INTO cases (
+                case_id,
+                customer_id,
+                original_filename,
+                content_type,
+                status,
+                created_at,
+                updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                case_id,
+                "CUST-DB03",
+                "proof.pdf",
+                "application/pdf",
+                "processing",
+                "2026-09-23T14:00:00+00:00",
+                "2026-09-23T14:00:00+00:00",
+            ),
+        )
+
+
+def _db03_fields() -> NormalizedFields:
+    def _present(raw, normalized):
+        return NormalizedFieldValue(
+            raw_value=raw,
+            status="present",
+            source_page=1,
+            source_reference="page-1#field",
+            normalized_value=normalized,
+        )
+
+    def _absent():
+        return NormalizedFieldValue(raw_value=None, status="missing")
+
+    return NormalizedFields(
+        customer_name=_present("  AARAV Mehta ", "aarav mehta"),
+        address=_present("42 Example Avenue, Vijayawada", "42 example avenue, vijayawada"),
+        document_type=_absent(),
+        document_date=_absent(),
+        issuer_name=_absent(),
+        document_number=_absent(),
+        postal_code=_present("520 001", "520001"),
+    )
+
+
+def test_initialization_creates_extracted_fields_table(tmp_path: Path):
+    db_path = tmp_path / "test.db"
+
+    initialize_database(db_path)
+
+    with sqlite3.connect(db_path) as connection:
+        table = connection.execute(
+            """
+            SELECT name
+            FROM sqlite_master
+            WHERE type = 'table' AND name = 'extracted_fields'
+            """
+        ).fetchone()
+
+    assert table == ("extracted_fields",)
+
+
+def test_extracted_fields_round_trip_keeps_raw_and_normalized_distinct(tmp_path: Path):
+    db_path = tmp_path / "test.db"
+
+    initialize_database(db_path)
+    _seed_case(db_path)
+
+    assert save_extracted_fields(db_path, "CASE-DB03-001", _db03_fields()) == 7
+
+    loaded = load_extracted_fields(db_path, "CASE-DB03-001")
+
+    assert set(loaded.keys()) == {
+        "customer_name",
+        "address",
+        "document_type",
+        "document_date",
+        "issuer_name",
+        "document_number",
+        "postal_code",
+    }
+    assert loaded["customer_name"]["raw_value"] == "  AARAV Mehta "
+    assert loaded["customer_name"]["normalized_value"] == "aarav mehta"
+    assert loaded["customer_name"]["raw_value"] != loaded["customer_name"]["normalized_value"]
+    assert loaded["postal_code"]["raw_value"] == "520 001"
+    assert loaded["postal_code"]["normalized_value"] == "520001"
+    assert loaded["document_type"]["status"] == "missing"
+    assert loaded["document_type"]["raw_value"] is None
+
+
+def test_extracted_fields_save_is_idempotent_upsert(tmp_path: Path):
+    db_path = tmp_path / "test.db"
+
+    initialize_database(db_path)
+    _seed_case(db_path)
+
+    save_extracted_fields(db_path, "CASE-DB03-001", _db03_fields())
+    save_extracted_fields(db_path, "CASE-DB03-001", _db03_fields())
+
+    with sqlite3.connect(db_path) as connection:
+        count = connection.execute(
+            "SELECT COUNT(*) FROM extracted_fields WHERE case_id = ?",
+            ("CASE-DB03-001",),
+        ).fetchone()[0]
+
+    assert count == 7
+
+
+def test_extracted_fields_reject_invalid_status(tmp_path: Path):
+    db_path = tmp_path / "test.db"
+
+    initialize_database(db_path)
+    _seed_case(db_path)
+
+    with sqlite3.connect(db_path) as connection:
+        try:
+            connection.execute(
+                """
+                INSERT INTO extracted_fields (
+                    case_id,
+                    field_name,
+                    status
+                )
+                VALUES (?, ?, ?)
+                """,
+                ("CASE-DB03-001", "customer_name", "guessed"),
+            )
+        except sqlite3.IntegrityError:
+            pass
+        else:
+            raise AssertionError("Invalid field status was accepted")
+
+
+def test_load_missing_case_is_explicit(tmp_path: Path):
+    db_path = tmp_path / "test.db"
+
+    initialize_database(db_path)
+
+    with pytest.raises(RepositoryError) as exc_info:
+        load_extracted_fields(db_path, "CASE-NOPE")
+
+    assert exc_info.value.code == "FIELDS_NOT_FOUND"
+
+
+def test_extracted_fields_survive_restart(tmp_path: Path):
+    db_path = tmp_path / "persistent.db"
+
+    initialize_database(db_path)
+    _seed_case(db_path)
+    save_extracted_fields(db_path, "CASE-DB03-001", _db03_fields())
+
+    loaded = load_extracted_fields(db_path, "CASE-DB03-001")
+
+    assert loaded["address"]["normalized_value"] == "42 example avenue, vijayawada"
