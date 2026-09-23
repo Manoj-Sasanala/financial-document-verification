@@ -126,3 +126,61 @@ def test_processing_failed_state_for_unreadable_case(tmp_path: Path) -> None:
     }
     assert result.review is not None
     assert result.review.decision == "request_information"
+
+
+# ---------------------------------------------------------------------------
+# QA-04: Failure-path QA (DoD: all required failure-path tests pass; forced
+# RAG/LLM failure does not delete earlier findings)
+# ---------------------------------------------------------------------------
+
+
+def test_unreadable_ocr_case_yields_controlled_missing_findings(tmp_path: Path) -> None:
+    from app.document.field_parser import parse_fields as _parse
+    from app.verification.compare import compare_fields as _compare
+    from app.verification.normalize import normalize_fields as _nf
+    from app.verification.risk_rules import assess_risk as _assess
+    from app.verification.validate import validate_fields as _validate
+
+    parsed = _parse("████ ▓▓▓▓ ??? unreadable/OCR-hostile ???")
+    normalized = _nf(parsed.fields)
+    findings = _validate(normalized)
+    comparisons = _compare(normalized, None)
+    indicators = _assess(findings, comparisons, reference_found=False)
+
+    assert {c.status for c in comparisons} == {"unavailable"}
+    assert "reference_customer_not_found" in [i.indicator_code for i in indicators]
+
+
+def test_forced_failures_do_not_delete_earlier_findings(tmp_path: Path) -> None:
+    from app.db.repository import load_findings
+
+    db_path = _seed_mismatch_db(tmp_path, case_id="CASE-FAIL-005")
+    before = load_findings(db_path, "CASE-FAIL-005")
+    assert any(r["ref"] == "name_mismatch" for r in before)
+
+    result = process_case(
+        "CASE-FAIL-005",
+        db_path=db_path,
+        retriever=_boom_retriever,
+        llm_explain=_boom_explain,
+    )
+
+    after = load_findings(db_path, "CASE-FAIL-005")
+    assert before == after
+    assert [i.indicator_code for i in result.risk_indicators] == ["name_mismatch"]
+
+
+def test_llm_timeout_returns_controlled_failed_explanation(tmp_path: Path) -> None:
+    def _timeout(_: str) -> str:
+        raise TimeoutError("llm timed out")
+
+    db_path = _seed_mismatch_db(tmp_path, case_id="CASE-FAIL-006")
+    result = process_case(
+        "CASE-FAIL-006",
+        db_path=db_path,
+        llm_transport=_timeout,
+    )
+
+    assert result.explanation is not None
+    assert result.explanation.status == "failed"
+    assert [i.indicator_code for i in result.risk_indicators] == ["name_mismatch"]
