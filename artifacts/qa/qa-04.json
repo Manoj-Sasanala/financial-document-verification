@@ -1,0 +1,13 @@
+{
+  "task_id": "QA-04",
+  "report": "failure-path tests",
+  "test_file": "tests/integration/test_failures.py",
+  "tests": 7,
+  "passed": 7,
+  "suites": {
+    "rag_llm_outage": "degraded results keep deterministic core",
+    "unreadable_ocr": "controlled missing and unavailable outcomes",
+    "finding_persistence": "stored findings survive failed runs",
+    "llm_timeout": "controlled failed explanation status"
+  }
+}
