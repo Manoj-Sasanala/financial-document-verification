@@ -1,0 +1,12 @@
+{
+  "contract_id": "C02",
+  "case_id": "CASE-006",
+  "status": "completed",
+  "normalized_fields": {"customer_name": "aarav mehta", "address": "42 example avenue, vijayawada", "document_type": "utility_service_notice", "document_date": "2026-09-20", "issuer_name": "demo utility board", "document_number": "poa-006", "postal_code": "520001"},
+  "validation_findings": [{"field": "document_type", "code": "UNSUPPORTED_DOCUMENT", "message": "Only proof_of_address documents are supported.", "severity": "error"}],
+  "comparison_findings": [],
+  "risk_indicators": [{"rule_id": "RISK-UNSUPPORTED-DOCUMENT", "category": "unsupported_document", "severity": "high", "reason": "The extracted document type is outside the configured proof-of-address input boundary.", "affected_field": "document_type"}],
+  "deterministic_status": "insufficient_evidence",
+  "rule_version": "risk-rules-v1",
+  "error": null
+}

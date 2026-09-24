@@ -1,0 +1,12 @@
+{
+  "contract_id": "C02",
+  "case_id": "CASE-003",
+  "status": "completed",
+  "normalized_fields": {"customer_name": "aarav mehta", "address": "99 synthetic street, vijayawada", "document_type": "proof_of_address", "document_date": "2026-09-20", "issuer_name": "demo utility board", "document_number": "poa-003", "postal_code": "520001"},
+  "validation_findings": [],
+  "comparison_findings": [{"field": "address", "result": "mismatch", "reference_value": "42 example avenue, vijayawada", "observed_value": "99 synthetic street, vijayawada", "reason": "Normalized values differ."}],
+  "risk_indicators": [{"rule_id": "RISK-ADDRESS-MISMATCH", "category": "address_mismatch", "severity": "high", "reason": "Observed address differs from the reference customer address.", "affected_field": "address"}],
+  "deterministic_status": "attention_required",
+  "rule_version": "risk-rules-v1",
+  "error": null
+}

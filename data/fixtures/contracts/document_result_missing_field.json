@@ -1,0 +1,19 @@
+{
+  "contract_id": "C01",
+  "case_id": "CASE-004",
+  "customer_id": "CUST-0001",
+  "status": "completed_with_warnings",
+  "document_type": "proof_of_address",
+  "extracted_text": "Customer Name: Aarav Mehta\nAddress:\nProof of Address\nDate: 2026-09-20\nIssuer: Demo Utility Board\nDocument Number: POA-004\nPostal Code: 520001",
+  "fields": {
+    "customer_name": {"raw": "Aarav Mehta", "value": "Aarav Mehta", "status": "present"},
+    "address": {"raw": "", "value": null, "status": "missing"},
+    "document_type": {"raw": "Proof of Address", "value": "proof_of_address", "status": "present"},
+    "document_date": {"raw": "2026-09-20", "value": "2026-09-20", "status": "present"},
+    "issuer_name": {"raw": "Demo Utility Board", "value": "Demo Utility Board", "status": "present"},
+    "document_number": {"raw": "POA-004", "value": "POA-004", "status": "present"},
+    "postal_code": {"raw": "520001", "value": "520001", "status": "present"}
+  },
+  "warnings": ["address field could not be extracted"],
+  "error": null
+}

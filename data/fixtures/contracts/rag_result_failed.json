@@ -1,0 +1,7 @@
+{
+  "contract_id": "C04",
+  "case_id": "CASE-011",
+  "status": "failed",
+  "evidence": [],
+  "error": {"contract_id": "C09", "stage": "rag", "code": "RAG_UNAVAILABLE", "message": "The controlled policy retrieval index is unavailable.", "retryable": true, "fatal": false, "details": {}}
+}

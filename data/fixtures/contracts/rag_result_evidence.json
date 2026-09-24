@@ -1,0 +1,13 @@
+{
+  "contract_id": "C04",
+  "case_id": "CASE-003",
+  "status": "completed",
+  "evidence": [{
+    "source_id": "POL-RISK-002",
+    "version": "1.0.0",
+    "chunk_id": "POL-RISK-002#chunk-002",
+    "text": "After deterministic normalization, if the document address does not match the corresponding reference customer address, the case shall produce the address_mismatch risk indicator.",
+    "score": 0.87
+  }],
+  "error": null
+}
