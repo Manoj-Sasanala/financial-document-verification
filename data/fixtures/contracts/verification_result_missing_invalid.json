@@ -1,0 +1,21 @@
+{
+  "contract_id": "C02",
+  "case_id": "CASE-004",
+  "status": "completed_with_warnings",
+  "normalized_fields": {"customer_name": "aarav mehta", "address": null, "document_type": "proof_of_address", "document_date": "2026-02-30", "issuer_name": "demo utility board", "document_number": "poa-004", "postal_code": "520001"},
+  "validation_findings": [
+    {"field": "address", "code": "MISSING_REQUIRED_FIELD", "message": "Required address field is missing.", "severity": "error"},
+    {"field": "document_date", "code": "INVALID_DOCUMENT_DATE", "message": "Document date is not a valid calendar date.", "severity": "error"}
+  ],
+  "comparison_findings": [
+    {"field": "address", "result": "missing", "reference_value": "42 example avenue, vijayawada", "observed_value": null, "reason": "Observed address is missing."},
+    {"field": "document_date", "result": "unavailable", "reference_value": null, "observed_value": "2026-02-30", "reason": "Invalid date cannot be validated."}
+  ],
+  "risk_indicators": [
+    {"rule_id": "RISK-MISSING-FIELD", "category": "missing_required_field", "severity": "high", "reason": "A required document field is missing.", "affected_field": "address"},
+    {"rule_id": "RISK-INVALID-DATE", "category": "invalid_document_date", "severity": "medium", "reason": "The document date is invalid.", "affected_field": "document_date"}
+  ],
+  "deterministic_status": "insufficient_evidence",
+  "rule_version": "risk-rules-v1",
+  "error": null
+}

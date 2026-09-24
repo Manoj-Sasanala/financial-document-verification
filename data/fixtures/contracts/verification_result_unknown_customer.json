@@ -1,0 +1,14 @@
+{
+  "contract_id": "C02",
+  "case_id": "CASE-007",
+  "status": "completed",
+  "normalized_fields": {"customer_name": "synthetic unknown customer", "address": "1 synthetic unknown street, vijayawada", "document_type": "proof_of_address", "document_date": "2026-09-20", "issuer_name": "demo utility board", "document_number": "poa-007", "postal_code": "520999"},
+  "validation_findings": [],
+  "comparison_findings": [
+    {"field": "customer_name", "result": "unavailable", "reference_value": null, "observed_value": "synthetic unknown customer", "reason": "No reference customer exists for the requested customer ID."}
+  ],
+  "risk_indicators": [{"rule_id": "RISK-CUSTOMER-NOT-FOUND", "category": "customer_not_found", "severity": "high", "reason": "The requested synthetic customer ID is not present in the reference dataset.", "affected_field": null}],
+  "deterministic_status": "insufficient_evidence",
+  "rule_version": "risk-rules-v1",
+  "error": null
+}

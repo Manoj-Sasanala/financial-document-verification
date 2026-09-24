@@ -1,0 +1,9 @@
+{
+  "contract_id": "C03",
+  "case_id": "CASE-009",
+  "status": "failed",
+  "class": null,
+  "model_version": "tfidf-logreg-v1",
+  "evaluation_reference": null,
+  "error": {"contract_id": "C09", "stage": "ml", "code": "ML_UNAVAILABLE", "message": "The saved ML artifacts could not be loaded.", "retryable": true, "fatal": false, "details": {}}
+}

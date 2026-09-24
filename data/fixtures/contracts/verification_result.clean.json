@@ -1,0 +1,23 @@
+{
+  "contract_id": "C02",
+  "case_id": "CASE-001",
+  "status": "completed",
+  "normalized_fields": {
+    "customer_name": "aarav mehta",
+    "address": "42 example avenue, vijayawada",
+    "document_type": "proof_of_address",
+    "document_date": "2026-09-20",
+    "issuer_name": "demo utility board",
+    "document_number": "poa-001",
+    "postal_code": "520001"
+  },
+  "validation_findings": [],
+  "comparison_findings": [
+    {"field": "customer_name", "result": "match", "reference_value": "aarav mehta", "observed_value": "aarav mehta", "reason": "Normalized values match."},
+    {"field": "address", "result": "match", "reference_value": "42 example avenue, vijayawada", "observed_value": "42 example avenue, vijayawada", "reason": "Normalized values match."}
+  ],
+  "risk_indicators": [],
+  "deterministic_status": "verified",
+  "rule_version": "risk-rules-v1",
+  "error": null
+}

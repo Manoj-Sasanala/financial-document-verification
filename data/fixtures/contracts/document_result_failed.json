@@ -1,0 +1,19 @@
+{
+  "contract_id": "C01",
+  "case_id": "CASE-009",
+  "customer_id": "CUST-0001",
+  "status": "failed",
+  "document_type": "proof_of_address",
+  "extracted_text": null,
+  "fields": {
+    "customer_name": {"raw": "", "value": null, "status": "uncertain"},
+    "address": {"raw": "", "value": null, "status": "uncertain"},
+    "document_type": {"raw": "", "value": null, "status": "uncertain"},
+    "document_date": {"raw": "", "value": null, "status": "uncertain"},
+    "issuer_name": {"raw": "", "value": null, "status": "uncertain"},
+    "document_number": {"raw": "", "value": null, "status": "uncertain"},
+    "postal_code": {"raw": "", "value": null, "status": "uncertain"}
+  },
+  "warnings": [],
+  "error": {"contract_id": "C09", "stage": "extraction", "code": "EXTRACTION_FAILED", "message": "No usable extraction result was produced.", "retryable": false, "fatal": true, "details": {}}
+}

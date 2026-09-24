@@ -1,0 +1,10 @@
+{
+  "contract_id": "C03",
+  "case_id": "CASE-001",
+  "status": "completed",
+  "class": "consistent",
+  "confidence": 0.94,
+  "model_version": "tfidf-logreg-v1",
+  "evaluation_reference": "synthetic-test-v1",
+  "error": null
+}
